@@ -10,11 +10,17 @@ namespace Tlachihuani.Windows;
 // This adapter has no caller-selected service name, image, command line, or PID.
 public sealed class ScmBackend : IServiceBackend
 {
+    private readonly bool jobs;
+    public ScmBackend() { }
+    private ScmBackend(bool jobs) => this.jobs = jobs;
+    public static ScmBackend ForJobs() => new(true);
+    private string ServiceName => jobs ? JobsEndpoint.ServiceName : Protocol.ServiceName;
+
     public NativeStatus Query()
     {
         using var manager = OpenSCManager(null, null, 1);
         Check(manager);
-        using var service = OpenService(manager, Protocol.ServiceName, 4);
+        using var service = OpenService(manager, ServiceName, 4);
         if (service.IsInvalid && Marshal.GetLastWin32Error() == 1060) return new("not_installed");
         Check(service);
         if (!QueryServiceStatusEx(service, 0, out var status, Marshal.SizeOf<Status>(), out _)) Fail();
@@ -26,11 +32,17 @@ public sealed class ScmBackend : IServiceBackend
         }, checked((int)status.Pid), checked((int)status.Win32ExitCode));
     }
 
-    public void ValidateInstallation(Installation installation)
+    public void ValidateInstallation(Installation installation) => ValidateImage(installation.ServicePath);
+    public void ValidateJobsInstallation()
+    {
+        if (!jobs) throw new InvalidOperationException("Expected the Jobs service.");
+        ValidateImage(JobsInstallation.Image);
+    }
+    private void ValidateImage(string expected)
     {
         using var manager = OpenSCManager(null, null, 1);
         Check(manager);
-        using var service = OpenService(manager, Protocol.ServiceName, 1);
+        using var service = OpenService(manager, ServiceName, 1);
         Check(service);
         QueryServiceConfig(service, IntPtr.Zero, 0, out var needed);
         if (needed is 0 or > 65536) Fail();
@@ -40,7 +52,9 @@ public sealed class ScmBackend : IServiceBackend
             if (!QueryServiceConfig(service, buffer, needed, out _)) Fail();
             var config = Marshal.PtrToStructure<ServiceConfig>(buffer);
             var binary = Marshal.PtrToStringUni(config.BinaryPath);
-            if (config.Type != 0x10 || !string.Equals(binary, $"\"{installation.ServicePath}\"", StringComparison.OrdinalIgnoreCase))
+            if (jobs && !string.Equals(Marshal.PtrToStringUni(config.StartName), @"NT SERVICE\Tlachihuani.Jobs", StringComparison.OrdinalIgnoreCase))
+                throw new LifecycleException("identity_changed", "Unexpected Jobs service account.");
+            if (config.Type != 0x10 || !string.Equals(binary, $"\"{expected}\"", StringComparison.OrdinalIgnoreCase))
                 throw new LifecycleException("identity_changed", "The registered service executable does not match this installation.");
         }
         finally { Marshal.FreeHGlobal(buffer); }
@@ -64,11 +78,11 @@ public sealed class ScmBackend : IServiceBackend
         catch (Win32Exception ex) when (ex.NativeErrorCode is 5 or 1060) { return false; }
     }
 
-    private static ScHandle OpenFor(uint access)
+    private ScHandle OpenFor(uint access)
     {
         using var manager = OpenSCManager(null, null, 1);
         Check(manager);
-        var service = OpenService(manager, Protocol.ServiceName, access);
+        var service = OpenService(manager, ServiceName, access);
         if (service.IsInvalid) { var error = Marshal.GetLastWin32Error(); service.Dispose(); throw new Win32Exception(error); }
         return service;
     }

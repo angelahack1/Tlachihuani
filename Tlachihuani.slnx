@@ -6,6 +6,7 @@
     <Project Path="src/Tlachihuani.Client/Tlachihuani.Client.csproj" />
     <Project Path="src/Tlachihuani.Service/Tlachihuani.Service.csproj" />
     <Project Path="src/Tlachihuani.Control/Tlachihuani.Control.csproj" />
+    <Project Path="src/Tlachihuani.Jobs/Tlachihuani.Jobs.csproj" />
     <Project Path="src/Tlachihuani.Tray/Tlachihuani.Tray.csproj" />
   </Folder>
   <Folder Name="/tests/">

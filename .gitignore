@@ -1,6 +1,8 @@
 # Tlachihuani — Windows service and XT system-tray companion
 **/bin/
 **/obj/
+__pycache__/
+*.pyc
 .vs/
 .idea/
 *.user

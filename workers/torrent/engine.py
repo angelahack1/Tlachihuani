@@ -1,0 +1,564 @@
+"""BitTorrent engine. Destination paths and peer policy are service decisions."""
+
+import hashlib
+import ipaddress
+import threading
+from concurrent.futures import ThreadPoolExecutor
+import json
+import re
+import time
+from pathlib import PureWindowsPath
+from urllib.parse import urlsplit
+
+import libtorrent as lt
+
+from storage import Problem, packed, require, safe_file
+
+
+def inspect(raw):
+    require(0 < len(raw) <= 1048576, 413, "Metainfo exceeds the configured limit.")
+
+    def component(value):
+        require(isinstance(value, bytes), 422, "Invalid file name encoding.")
+        try:
+            part = value.decode("utf-8")
+        except UnicodeError:
+            raise Problem(422, "File names must be UTF-8.") from None
+        require(
+            part not in ("", ".", "..")
+            and not any(c in part for c in '<>:"/\\|?*')
+            and all(ord(c) >= 32 for c in part)
+            and not part.endswith((" ", "."))
+            and not PureWindowsPath(part).is_reserved(),
+            422,
+            "Unsafe metainfo path component.",
+        )
+
+    try:
+        meta = lt.bdecode(raw)[b"info"]
+        component(meta[b"name"])
+        if b"name.utf-8" in meta:
+            component(meta[b"name.utf-8"])
+        for entry in meta.get(b"files", []):
+            require(
+                b"symlink path" not in entry, 422, "Torrent symlinks are unsupported."
+            )
+            for key in (b"path", b"path.utf-8"):
+                for part in entry.get(key, []):
+                    component(part)
+
+        def walk(tree, depth):
+            require(
+                isinstance(tree, dict) and depth <= 64, 422, "Invalid v2 file tree."
+            )
+            for name, children in tree.items():
+                if name:
+                    component(name)
+                    walk(children, depth + 1)
+                else:
+                    require(
+                        b"symlink path" not in children,
+                        422,
+                        "Torrent symlinks are unsupported.",
+                    )
+
+        if b"file tree" in meta:
+            walk(meta[b"file tree"], 0)
+        info = lt.torrent_info(raw)
+    except (RuntimeError, ValueError, KeyError, TypeError):
+        raise Problem(422, "Invalid torrent metainfo.") from None
+    fs = info.files()
+    require(
+        0 < fs.num_files() <= 4096 and info.total_size() <= 50 * 1024**3,
+        422,
+        "Torrent exceeds size or file limits.",
+    )
+    seen = set()
+    files = []
+    for i in range(fs.num_files()):
+        path = fs.file_path(i).replace("\\", "/")
+        require(
+            not fs.file_flags(i) & fs.flag_symlink,
+            422,
+            "Torrent symlinks are unsupported.",
+        )
+        if fs.file_flags(i) & fs.flag_pad_file:
+            continue
+        parts = path.split("/")
+        require(
+            len(path) <= 800
+            and all(
+                part not in ("", ".", "..")
+                and not re.search(r'[<>:"|?*\x00-\x1f]', part)
+                and not part.endswith((" ", "."))
+                and not PureWindowsPath(part).is_reserved()
+                for part in parts
+            ),
+            422,
+            "Unsafe torrent path.",
+        )
+        require(path.casefold() not in seen, 422, "Duplicate torrent file name.")
+        require(
+            not any(
+                prefix.casefold() in seen
+                for prefix in ["/".join(parts[:i]) for i in range(1, len(parts))]
+            ),
+            422,
+            "File collides with a directory.",
+        )
+        seen.add(path.casefold())
+        files.append({"id": i, "path": path, "size": fs.file_size(i)})
+    require(files, 422, "No selectable files.")
+    for path in seen:
+        require(
+            not any(
+                "/".join(path.split("/")[:i]) in seen
+                for i in range(1, path.count("/") + 1)
+            ),
+            422,
+            "File collides with a directory.",
+        )
+    return info, files
+
+
+def endpoint(url):
+    u = urlsplit(url)
+    require(
+        u.scheme in ("http", "https", "udp")
+        and u.hostname
+        and not u.username
+        and not u.password,
+        422,
+        "Unsupported tracker or web seed.",
+    )
+    return u.hostname
+
+
+class Engine:
+    def __init__(self, journal, development):
+        self.j = journal
+        self.development = development
+        self.sessions = {}
+        self.handles = {}
+        self.lookups = {}
+        self.last_checkpoint = 0
+        self.last_cleanup = 0
+        self.pending_release = {}
+        self.failures = {}
+        self.publisher = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="verify-selected"
+        )
+        self.publications = {}
+        self.closing = threading.Event()
+
+    def verify_files(self, root, metainfo, selected):
+        _, files = inspect(metainfo)
+        entries = []
+        for file in files:
+            if file["id"] not in selected:
+                continue
+            path = safe_file(root, file["path"])
+            before = path.stat()
+            require(before.st_size == file["size"], 409, "Selected file is incomplete.")
+            sha = hashlib.sha256()
+            with path.open("rb") as stream:
+                while block := stream.read(1024 * 1024):
+                    if self.closing.is_set():
+                        raise InterruptedError("Publication interrupted.")
+                    sha.update(block)
+            after = path.stat()
+            require(
+                (after.st_size, after.st_mtime_ns, after.st_ino)
+                == (before.st_size, before.st_mtime_ns, before.st_ino),
+                409,
+                "File changed during verification.",
+            )
+            entries.append(dict(file, sha256=sha.hexdigest()))
+        return entries
+
+    def session(self, owner):
+        if owner in self.sessions:
+            return self.sessions[owner]
+        session = lt.session(
+            {
+                "listen_interfaces": "127.0.0.1:0" if self.development else "0.0.0.0:0",
+                "enable_dht": not self.development,
+                "enable_lsd": False,
+                "enable_upnp": False,
+                "enable_natpmp": False,
+                "allow_multiple_connections_per_ip": self.development,
+                "ssrf_mitigation": True,
+                "enable_incoming_utp": False,
+                "apply_ip_filter_to_trackers": True,
+                "upload_rate_limit": 262144,
+                "alert_mask": int(
+                    lt.alert.category_t.storage_notification
+                    | lt.alert.category_t.error_notification
+                    | lt.alert.category_t.status_notification
+                ),
+            }
+        )
+        blocked = [
+            "0.0.0.0/8",
+            "10.0.0.0/8",
+            "100.64.0.0/10",
+            "127.0.0.0/8",
+            "169.254.0.0/16",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "224.0.0.0/4",
+            "240.0.0.0/4",
+            "::/96",
+            "::ffff:0:0/96",
+            "fc00::/7",
+            "fe80::/10",
+            "ff00::/8",
+        ]
+        rule = lt.ip_filter()
+        for network in blocked:
+            n = ipaddress.ip_network(network)
+            rule.add_rule(str(n.network_address), str(n.broadcast_address), 1)
+        if self.development:
+            # Isolated console fixtures use loopback exclusively, never a public swarm.
+            rule.add_rule("0.0.0.0", "255.255.255.255", 1)
+            rule.add_rule("::", "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", 1)
+            rule.add_rule("127.0.0.1", "127.0.0.1", 0)
+        session.set_ip_filter(rule)
+        self.sessions[owner] = session
+        return session
+
+    def magnet(self, owner, ident, uri):
+        require(
+            isinstance(uri, str) and uri.startswith("magnet:?") and len(uri) <= 8192,
+            422,
+            "Expected a bounded magnet URI.",
+        )
+        require(len(self.lookups) < 4, 429, "Metadata inspection capacity reached.")
+        try:
+            params = lt.parse_magnet_uri(uri)
+        except RuntimeError:
+            raise Problem(422, "Invalid magnet.") from None
+        for tracker in params.trackers:
+            endpoint(tracker)
+        for url in [*params.url_seeds, *params.http_seeds]:
+            endpoint(url)
+            require(
+                urlsplit(url).scheme in ("http", "https"),
+                422,
+                "Invalid magnet web seed.",
+            )
+        params.save_path = str(self.j.root / "inspections" / ident)
+        params.flags |= (
+            lt.torrent_flags.upload_mode
+            | lt.torrent_flags.default_dont_download
+            | lt.torrent_flags.duplicate_is_error
+        )
+        params.flags &= ~(lt.torrent_flags.paused | lt.torrent_flags.auto_managed)
+        self.lookups[ident] = (
+            owner,
+            self.session(owner).add_torrent(params),
+            time.time() + 180,
+        )
+
+    def open(self, row):
+        info, files = inspect(row["metainfo"])
+        root = self.j.files_root(row)
+        root.mkdir(parents=True, exist_ok=True)
+        for file in files:
+            safe_file(root, file["path"])
+        selected = set(json.loads(row["selection"]))
+        params = lt.add_torrent_params()
+        if row["resume"]:
+            try:
+                params = lt.read_resume_data(row["resume"])
+            except RuntimeError:
+                pass  # existing pieces will be checked
+        params.ti = info
+        params.save_path = str(root)
+        opts = json.loads(row["options"])
+        if opts.get("bootstrap_magnet"):
+            params.peers = lt.parse_magnet_uri(opts["bootstrap_magnet"]).peers
+        priorities = opts.get("priorities", {})
+        params.file_priorities = [
+            priorities.get(str(i), 4) if i in selected else 0
+            for i in range(info.num_files())
+        ]
+        if "trackers" in opts:
+            params.trackers = opts["trackers"]
+            params.tracker_tiers = list(range(len(params.trackers)))
+            params.flags |= lt.torrent_flags.override_trackers
+        if "web_seeds" in opts:
+            params.url_seeds = opts["web_seeds"]
+            params.http_seeds = []
+            params.flags |= lt.torrent_flags.override_web_seeds
+        params.flags &= ~(
+            lt.torrent_flags.paused
+            | lt.torrent_flags.auto_managed
+            | lt.torrent_flags.seed_mode
+            | lt.torrent_flags.upload_mode
+        )
+        params.flags |= (
+            lt.torrent_flags.duplicate_is_error | lt.torrent_flags.apply_ip_filter
+        )
+        if info.priv():
+            params.flags |= (
+                lt.torrent_flags.disable_dht
+                | lt.torrent_flags.disable_lsd
+                | lt.torrent_flags.disable_pex
+            )
+        h = self.session(row["owner"]).add_torrent(params)
+        h.set_download_limit(opts.get("download_limit", 0))
+        h.set_upload_limit(opts.get("upload_limit", 0))
+        self.handles[row["id"]] = h
+        return h
+
+    def alerts(self):
+        for session in self.sessions.values():
+            for alert in session.pop_alerts():
+                if isinstance(
+                    alert, (lt.save_resume_data_alert, lt.save_resume_data_failed_alert)
+                ):
+                    ident = next(
+                        (i for i, h in self.handles.items() if h == alert.handle), None
+                    )
+                    if ident:
+                        if isinstance(alert, lt.save_resume_data_alert):
+                            self.j.db.execute(
+                                "UPDATE jobs SET resume=? WHERE id=?",
+                                (bytes(lt.write_resume_data_buf(alert.params)), ident),
+                            )
+                        if ident in self.pending_release:
+                            # Missing resume data is recoverable by rechecking existing bytes.
+                            session.remove_torrent(self.handles.pop(ident))
+                            self.pending_release.pop(ident, None)
+
+    def snapshot(self, row):
+        result = json.loads(row["snapshot"])
+        desired = row["desired"]
+        h = self.handles.get(row["id"])
+        if h and h.is_valid():
+            s = h.status()
+            phase = "downloading" if s.num_peers else "waiting_for_peers"
+            if "checking" in str(s.state):
+                phase = "checking"
+            elif s.errc.value():
+                phase = "failed"
+            elif s.is_finished:
+                phase = (
+                    "seeding"
+                    if row["completed"]
+                    and json.loads(row["options"]).get("seed_after_completion")
+                    else ("completed" if row["completed"] else "verifying")
+                )
+            if row["id"] in self.failures:
+                phase = "failed"
+            if desired != "running":
+                phase = {
+                    "paused": "pausing",
+                    "stopped": "stopping",
+                    "cancelled": "cancelling",
+                }[desired]
+            result.update(
+                phase=phase,
+                verified_bytes=s.total_wanted_done,
+                download_rate_bps=s.download_payload_rate,
+                upload_rate_bps=s.upload_payload_rate,
+                peers=s.num_peers,
+                seeds=s.num_seeds,
+                availability=s.distributed_copies
+                if s.distributed_copies >= 0
+                else None,
+                known_seeds=s.num_complete if s.num_complete >= 0 else None,
+                known_peers=s.num_incomplete if s.num_incomplete >= 0 else None,
+                eta_seconds=int(
+                    max(0, s.total_wanted - s.total_wanted_done)
+                    / s.download_payload_rate
+                )
+                if s.download_payload_rate
+                else None,
+                ratio=s.all_time_upload / max(s.all_time_download, 1),
+            )
+        else:
+            result.update(
+                phase={
+                    "paused": "paused",
+                    "stopped": "stopped",
+                    "cancelled": "cancelled",
+                }.get(
+                    desired,
+                    "completed"
+                    if row["completed"]
+                    else ("failed" if row["id"] in self.failures else "queued"),
+                ),
+                download_rate_bps=0,
+                upload_rate_bps=0,
+                peers=0,
+                seeds=0,
+            )
+        result.update(
+            job_id=row["id"],
+            revision=row["revision"],
+            desired_state=desired,
+            completed_at=row["completed"],
+            **json.loads(row["options"]),
+        )
+        for private_setting in ("trackers", "web_seeds", "bootstrap_magnet"):
+            result.pop(private_setting, None)
+        result["destination_root_id"] = row["root_id"]
+        if row["id"] in self.failures:
+            result["error"] = self.failures[row["id"]]
+        return result
+
+    def tick(self):
+        now = time.time()
+        self.alerts()
+        for ident, (owner, h, expires) in list(self.lookups.items()):
+            if h.status().has_metadata or now > expires:
+                try:
+                    if h.status().has_metadata:
+                        # Peers send the info dictionary only. The reviewed admission must
+                        # carry its approved discovery hints into the fresh download handle.
+                        uri = self.j.db.execute(
+                            "SELECT magnet FROM inspections WHERE id=?", (ident,)
+                        ).fetchone()[0]
+                        hints = lt.parse_magnet_uri(uri)
+                        creator = lt.create_torrent(h.torrent_file())
+                        for index, url in enumerate(hints.trackers):
+                            creator.add_tracker(
+                                url,
+                                hints.tracker_tiers[index]
+                                if index < len(hints.tracker_tiers)
+                                else 0,
+                            )
+                        for url in hints.url_seeds:
+                            creator.add_url_seed(url)
+                        for url in hints.http_seeds:
+                            creator.add_http_seed(url)
+                        raw = bytes(lt.bencode(creator.generate()))
+                        inspect(raw)
+                        self.j.db.execute(
+                            "UPDATE inspections SET metainfo=? WHERE id=?", (raw, ident)
+                        )
+                except (Problem, RuntimeError, ValueError, KeyError):
+                    pass  # Invalid remote metadata expires this inspection; other jobs continue.
+                finally:
+                    self.sessions[owner].remove_torrent(h)
+                    del self.lookups[ident]
+        rows = self.j.db.execute(
+            "SELECT * FROM jobs WHERE removed=0 ORDER BY coalesce(json_extract(options,'$.queue_position'),0),created,id"
+        ).fetchall()
+        for row in rows:
+            ident = row["id"]
+            h = self.handles.get(ident)
+            opts = json.loads(row["options"])
+            can_seed = (
+                row["completed"]
+                and opts.get("seed_after_completion")
+                and now < opts.get("seed_until", row["completed"] + 3600)
+                and not opts.get("seed_finished")
+            )
+            if (
+                row["desired"] == "running"
+                and (not row["completed"] or can_seed)
+                and not h
+                and ident not in self.failures
+                and len(self.handles) < 4
+            ):
+                same_owner = sum(
+                    r["id"] in self.handles and r["owner"] == row["owner"] for r in rows
+                )
+                if same_owner < 2:
+                    try:
+                        h = self.open(row)
+                    except (RuntimeError, OSError, ValueError, Problem) as exc:
+                        self.failures[ident] = str(exc)
+            if not h:
+                continue
+            state = self.snapshot(row)
+            before = json.loads(row["snapshot"])
+            if before != state:
+                self.j.db.execute(
+                    "UPDATE jobs SET snapshot=? WHERE id=?", (packed(state), ident)
+                )
+                if before.get("phase") != state["phase"]:
+                    self.j.event(row["owner"], ident, state["phase"])
+            if state["phase"] == "verifying":
+                if not json.loads(row["options"]).get("seed_after_completion"):
+                    h.pause()
+                if ident not in self.publications:
+                    self.publications[ident] = (
+                        row["revision"],
+                        self.publisher.submit(
+                            self.verify_files,
+                            self.j.files_root(row),
+                            row["metainfo"],
+                            json.loads(row["selection"]),
+                        ),
+                    )
+            if ident in self.publications and self.publications[ident][1].done():
+                revision, future = self.publications.pop(ident)
+                if revision == row["revision"] and row["desired"] == "running":
+                    try:
+                        entries = future.result()
+                    except (OSError, Problem, RuntimeError) as exc:
+                        self.failures[ident] = str(exc)
+                    else:
+                        self.j.db.execute(
+                            "INSERT OR REPLACE INTO published VALUES(?,?)",
+                            (ident, packed(entries)),
+                        )
+                        self.j.db.execute(
+                            "UPDATE jobs SET completed=? WHERE id=?", (int(now), ident)
+                        )
+            ratio_reached = state["phase"] == "seeding" and (
+                now >= opts.get("seed_until", row["completed"] + 3600)
+                or h.status().all_time_upload >= state["selected_bytes"]
+            )
+            if ratio_reached:
+                opts["seed_finished"] = True
+                self.j.db.execute(
+                    "UPDATE jobs SET options=? WHERE id=?", (packed(opts), ident)
+                )
+            if (
+                row["desired"] != "running"
+                or state["phase"] in ("completed", "failed")
+                or ratio_reached
+            ):
+                if ident not in self.pending_release:
+                    h.pause()
+                    h.save_resume_data()
+                    self.pending_release[ident] = now
+                elif now - self.pending_release[ident] > 12:
+                    self.sessions[row["owner"]].remove_torrent(self.handles.pop(ident))
+                    del self.pending_release[ident]
+            elif now - self.last_checkpoint >= 30:
+                h.save_resume_data()
+        if now - self.last_checkpoint >= 30:
+            self.last_checkpoint = now
+        if now - self.last_cleanup >= 60:
+            self.j.db.execute("DELETE FROM inspections WHERE expires<?", (int(now),))
+            self.j.db.execute("DELETE FROM tokens WHERE expires<?", (int(now),))
+            self.j.db.execute("DELETE FROM previews WHERE expires<?", (int(now),))
+            self.j.db.execute("DELETE FROM nonces WHERE expires<?", (int(now),))
+            for old in self.j.db.execute(
+                "SELECT owner,max(cursor) AS last FROM events WHERE at<? GROUP BY owner",
+                (int(now) - 604800,),
+            ).fetchall():
+                self.j.db.execute(
+                    "INSERT OR REPLACE INTO event_floors VALUES(?,?)",
+                    (old["owner"], old["last"]),
+                )
+            self.j.db.execute("DELETE FROM events WHERE at<?", (int(now) - 604800,))
+            self.last_cleanup = now
+
+    def close(self):
+        self.closing.set()
+        self.publisher.shutdown(wait=True, cancel_futures=True)
+        for h in self.handles.values():
+            h.pause()
+            h.save_resume_data()
+        until = time.monotonic() + 1
+        while self.handles and time.monotonic() < until:
+            time.sleep(0.05)
+            self.alerts()
+        self.j.db.commit()

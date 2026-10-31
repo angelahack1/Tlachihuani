@@ -24,7 +24,11 @@ The 2026-10-11 review used Tlamatini HEAD `c18d50815cfe8b1681f805fd4e76c66fbaeab
 4. [Implementation plan](docs/implementation-plan.md), [verification plan](docs/verification-plan.md), [source review](docs/source-review.md).
 5. Before editing Tlamatini in a later authorized session, read its `AGENTS.md`, `CLAUDE.md`, `TestsVisiblesAndVisibleExecutionFromClaude2Codex.md`, and `docs/claude/INDEX.md` at the full checkout path above. Relevant skill paths and applicability are indexed in [skill-inventory.md](docs/skill-inventory.md).
 
-## Fixed design decisions
+## Torrenter and the Jobs host
+
+Read [the operating and REST contract](docs/torrenter.md). The independent `Tlachihuani.Jobs` SCM service owns the provider registry and child-process lifetime. A protected worker journal owns transfer state, permissions and durable receipts. XT manages providers on the Jobs v2 pipe. The web facade at `127.0.0.1:12064` exposes the transfer API to paired browsers and enrolled automation clients. SCM installation, delegated control and headed XT pairing were tested on 2026-10-31.
+
+## Original service design decisions
 
 - SCM service name and display name: `Tlachihuani`; own-process Windows service.
 - Resident binaries implemented: `Tlachihuani.Service.exe` (SCM/Session 0 or explicit development console) and `Tlachihuani.Tray.exe` (signed-in user's session).
@@ -51,4 +55,4 @@ Tlamatini's protected SQLite backup/restore mechanics are out of scope. Its `bui
 
 Use separate evidence for design review, unit checks, native SCM/service checks, tray UI, future Tlamatini browser integration, and installed release acceptance. A JSON fixture, mockup, or exit code alone cannot prove a running service or a visible tray icon.
 
-The concrete worker workload is an open product decision. Implement the lifecycle foundation first and ask before inventing functional work for the service. Proposed values in these documents are implementation defaults, not measurements of a running application.
+Torrenter is the first Jobs provider. Add later providers through the Jobs registry, and keep torrent-specific operations in its adapter. Consult the dated verification records before claiming installed acceptance.

@@ -35,8 +35,12 @@ internal sealed class StatusForm : Form
         var heading = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         heading.Controls.Add(new PictureBox { Image = icon.ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Size = new Size(38, 38), Margin = new Padding(0, 0, 12, 0) });
         var title = TextLabel("Tlachihuani · Windows service", 15, true);
-        title.Dock = DockStyle.None; title.Size = new Size(450, 38);
+        title.Dock = DockStyle.None; title.Size = new Size(340, 38);
         heading.Controls.Add(title);
+        var services = ActionButton("Services…");
+        services.AccessibleName = "Manage Tlachihuani services";
+        services.Click += (_, _) => { using var panel = new ServicesForm(Icon!); panel.ShowDialog(this); };
+        heading.Controls.Add(services);
         layout.Controls.Add(heading); layout.Controls.Add(state); layout.Controls.Add(health); layout.Controls.Add(details); layout.Controls.Add(note);
         var observationRow = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         observationRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); observationRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));

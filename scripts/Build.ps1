@@ -15,10 +15,11 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Checks failed: $LASTEXITCODE" }
     }
     if ($Mode -eq 'Publish') {
-        foreach ($component in @('Service', 'Control', 'Tray')) {
+        foreach ($component in @('Service', 'Control', 'Tray', 'Jobs')) {
             dotnet publish "src/Tlachihuani.$component/Tlachihuani.$component.csproj" --configuration Release --no-restore --output "artifacts/publish/$component"
             if ($LASTEXITCODE -ne 0) { throw "$component publish failed: $LASTEXITCODE" }
         }
     }
+    if ($Mode -eq 'Publish') { & "$PSScriptRoot\Prepare-JobsRuntime.ps1" -Destination (Join-Path $projectRoot 'artifacts\publish\Jobs\runtime') }
     Write-Host "$Mode completed successfully." -ForegroundColor Green
 } finally { Pop-Location }

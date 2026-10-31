@@ -3,7 +3,7 @@
 
 A standalone Windows service with an XAIHT XT system-tray companion, designed to be raised, monitored, stopped, and force-terminated from **Tlamatini → Panels → Tlachihuani**.
 
-**Status: first working lifecycle foundation, 2026-10-11 (updated 2026-10-31).** The .NET 10 solution implements the Windows service host, native SCM controls, authenticated local status channel, JSON controller, and original XT tray companion. See [implementation status](docs/implementation-status.md) for verification and remaining gates. Native installation is unverified; force-stop is not implemented yet. No service is installed on this machine, and no Tlamatini panel changes have been applied yet.
+**Status on 31 October 2026.** The independent Jobs service and its first provider, Torrenter, are implemented and installed on the authorized Windows test machine. Open **XT → Show panel → Services… → Open workspace** for downloads. The versioned REST API serves browser and application clients. [Operator and REST guide](docs/torrenter.md) · [Verification record](docs/implementation-status.md).
 
 ## Relationship to Tlamatini
 
@@ -20,7 +20,7 @@ A standalone Windows service with an XAIHT XT system-tray companion, designed to
 
 Tlamatini is the future control interface. Tlachihuani owns its service, tray process, local control protocol, installation, state, and logs. It is not a Tlamatini workflow agent or an ACPX/MCP plugin. Tlamatini closing, updating, or uninstalling must not implicitly terminate or remove Tlachihuani.
 
-Windows services cannot host the interactive tray UI directly. The design therefore uses two resident processes: a service managed by Windows Service Control Manager (SCM), and a tray companion in each participating signed-in Windows session. A small on-demand controller bridges Tlamatini's Python backend to native Windows APIs. See [architecture](docs/architecture.md).
+Windows services cannot host the interactive tray UI directly. The original design uses two resident processes: a service managed by Windows Service Control Manager (SCM), and a tray companion in each participating signed-in Windows session. A small on-demand controller bridges Tlamatini's Python backend to native Windows APIs. See [architecture](docs/architecture.md).
 
 ## Start here next session
 
@@ -40,7 +40,7 @@ Set-Location -LiteralPath 'C:\Development\XAIHT\Tlachihuani'
 .\artifacts\publish\Tray\Tlachihuani.Tray.exe --show
 ```
 
-The framework-dependent binaries require Windows x64 and the .NET 10 Desktop Runtime (which includes the core runtime). `Check` runs boundary checks and a real, temporary console service host; it does not install a Windows service. `Publish` creates `Service`, `Control`, and `Tray` directories under `artifacts/publish/`.
+The framework-dependent binaries require Windows x64 and the .NET 10 Desktop Runtime and, for Jobs, the ASP.NET Core 10 shared runtime. `Check` runs boundary checks and a real, temporary console service host; it does not install a Windows service. `Publish` creates `Service`, `Control`, `Tray`, and `Jobs` directories under `artifacts/publish/`.
 
 The controller accepts `status`, `events [--cursor N]`, `start`, `stop`, and `restart`, and emits one JSON reply. Start never installs anything. The tray remains available while stopped; Close hides its status window, and Exit tray leaves the service alone. For actual registration, read [Windows packaging](packaging/windows/README.md) first.
 
@@ -59,6 +59,6 @@ The controller accepts `status`, `events [--cursor N]`, `start`, `stop`, and `re
 
 ## Scope boundary
 
-The first implementation provides lifecycle control, health/status reporting, a tray presence, and diagnostics. Angela has not yet specified the service's eventual business workload. Keep a narrow workload boundary in Core; do not invent autonomous agents, microphone capture, scheduling, model calls, or arbitrary command execution.
+The original service provides lifecycle control and health reporting. The independent Jobs host runs Torrenter, the first implemented workload. The Tlamatini wrapped agent will consume the same owner-scoped API as the browser.
 
 **Do not edit Tlamatini or add its menu entry until Angela explicitly authorizes that integration. Do not create a GitHub repository, publish, or push this project on her behalf.**

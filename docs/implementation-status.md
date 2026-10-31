@@ -1,4 +1,10 @@
-# Lifecycle foundation — 2026-10-11
+# Jobs and Torrenter — 2026-10-31
+
+On ANGYSLAP, Jobs was installed and upgraded under its virtual service account. The delegated operator verified the named pipe and restarted Jobs from standard Windows PowerShell, while the original Tlachihuani service stayed stopped. The installed XT panel approved an actual headed Chrome session on port 12064. A private swarm exercised transfer, publication, recovery, isolation and deletion. See [the operating guide and verification scope](torrenter.md).
+
+The following entries are the historical October 11 foundation record.
+
+## Lifecycle foundation — 2026-10-11
 
 This page distinguishes working code from the broader design. No SCM service, registry startup entry, local Git repository or GitHub repository was created. Tlamatini remains a separate, read-only checkout at `C:\Development\XAIHT\Tlamatini`, https://github.com/XAIHT/Tlamatini.
 
