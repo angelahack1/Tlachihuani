@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><ApplicationIcon>../../assets/branding/XT.ico</ApplicationIcon></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Tlachihuani.Client/Tlachihuani.Client.csproj" /></ItemGroup>
+</Project>

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "tlachihuani.contracts": {
+        "type": "Project"
+      }
+    }
+  }
+}

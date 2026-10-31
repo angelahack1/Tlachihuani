@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>../../assets/branding/XT.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Tlachihuani.Client/Tlachihuani.Client.csproj" />
+    <EmbeddedResource Include="../../assets/branding/XT.ico" LogicalName="Tlachihuani.XT.ico" />
+  </ItemGroup>
+</Project>

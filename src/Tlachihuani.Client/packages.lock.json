@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0-windows7.0": {
+      "tlachihuani.contracts": {
+        "type": "Project"
+      },
+      "tlachihuani.core": {
+        "type": "Project",
+        "dependencies": {
+          "Tlachihuani.Contracts": "[0.1.0, )"
+        }
+      },
+      "tlachihuani.windows": {
+        "type": "Project",
+        "dependencies": {
+          "Tlachihuani.Core": "[0.1.0, )"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "date": "2026-10-11",
+  "tracked_paths": 1688,
+  "skills_loaded": 42,
+  "coverage": {
+    "code-pattern-scan": 1069,
+    "text-inventory": 376,
+    "excluded-private-or-runtime": 2,
+    "binary-or-non-utf8-inventory-only": 241
+  },
+  "icon_sha256": "71de562b49020a30d3ea0d2e5813ce11611fed09250e9340c46f5444237d34be"
+}

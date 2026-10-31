@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tlachihuani.Contracts/Tlachihuani.Contracts.csproj" />
+    <Project Path="src/Tlachihuani.Core/Tlachihuani.Core.csproj" />
+    <Project Path="src/Tlachihuani.Windows/Tlachihuani.Windows.csproj" />
+    <Project Path="src/Tlachihuani.Client/Tlachihuani.Client.csproj" />
+    <Project Path="src/Tlachihuani.Service/Tlachihuani.Service.csproj" />
+    <Project Path="src/Tlachihuani.Control/Tlachihuani.Control.csproj" />
+    <Project Path="src/Tlachihuani.Tray/Tlachihuani.Tray.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tlachihuani.Checks/Tlachihuani.Checks.csproj" />
+  </Folder>
+</Solution>

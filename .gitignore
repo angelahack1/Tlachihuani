@@ -1,0 +1,22 @@
+# Tlachihuani — Windows service and XT system-tray companion
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+TestResults/
+artifacts/
+Temp/
+logs/
+state/
+*.log
+*.dmp
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+appsettings.Local.json
+*.local.json

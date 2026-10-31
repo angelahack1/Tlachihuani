@@ -1,0 +1,296 @@
+[
+  {
+    "path": ".claude/skills/tlamatini-agent-creation/SKILL.md",
+    "name": "tlamatini-agent-creation",
+    "description": "The authoritative, exhaustive end-to-end runbook for creating a BRAND-NEW Tlamatini workflow agent — every surface, in order, with 530+ numbered steps across 26 phases. Invoke whenever Angela says \"create a new agent\", \"add an agent\", \"make a <X>er agent\", \"I want a new canvas agent\", or asks to wire any new pool agent across backend + frontend + Multi-Turn + Parametrizer + FlowCreator + FlowHypervisor + watchdog + config dialog + demo prompts + Python tests + Playwright harness tests + docs + packaging. Covers naming, coloring, the inputs/outputs connector contract in agentic_control_panel.html, the Multi-Turn (wrapped chat-agent) tool, Exec Report, the configuration dialog, automated unit tests AND Playwright tests in Claude's harness. Pairs with tlamatini-agent-naming (casing) and the @-imported create_new_agent.md / create_new_mcp.md.",
+    "bytes": 110677,
+    "sha256": "0de4fdcfab6fe12f723714be002dd9c4717f759419134947f1c0227a1e764ea7"
+  },
+  {
+    "path": ".claude/skills/tlamatini-agent-naming/SKILL.md",
+    "name": "tlamatini-agent-naming",
+    "description": "The authoritative Tlamatini agent NAMING CONVENTION — invoke before adding, renaming, casing, displaying, or auditing any workflow agent (STM32er, Node Manager, ACPXer, Kalier, ...). Use whenever you touch agentDescription, a pool/agent directory, a CSS .canvas-item class, a JS connection handler, agents_descriptions.md, or any place an agent name is shown. Prevents mis-casing display names (e.g. STM32er must never become STM32Er/STM32ER/Stm32Er).",
+    "bytes": 8519,
+    "sha256": "ea201b2306ddd89e8f6d572e4971c6adf729af42e0fc761efe37e49d08c7b9f5"
+  },
+  {
+    "path": ".claude/skills/tlamatini-daily-chat-test/SKILL.md",
+    "name": "tlamatini-daily-chat-test",
+    "description": "Run the daily automated Tlamatini chat regression — drive a visible Chrome via Playwright, log into agent_page.html, ask up to 1000 curated safe questions one-by-one (Multi-Turn ON, ACPX/Ask-Execs/Exec-Report/Internet OFF), wait for and qualify each answer (heuristic + LLM judge on failures), then write a dated report + summary. Invoke when the user says \"run the daily chat test\", \"test Tlamatini with the 1000 questions\", \"daily Tlamatini regression\", or schedules this test.",
+    "bytes": 31537,
+    "sha256": "865d460518f5a0cdbd46eb68ad81b7c65b1a8210b459cdf17bb3e7615f19f7c9"
+  },
+  {
+    "path": ".claude/skills/tlamatini-self-modify-inclusion/SKILL.md",
+    "name": "tlamatini-self-modify-inclusion",
+    "description": "Sweep the whole codebase and keep the SELF-MODIFY source snapshot complete — so the TlamatiniSourceCode/ tree that a `--self-modify` build ships carries every source/build asset Tlamatini needs to read, modify, and REBUILD herself, with heavy media/secrets correctly omitted+redacted and omitted binaries listed in the restore manifest. Invoke whenever you add/rename a new agent, source file, top-level dir, dependency, build input, prompt/identity file, migration, static/template asset, or any rebuild input — and ALWAYS after a feature like Blenderer or the self-update capability lands. Owns copy_source_assets.py and audits it against five invariants with a runnable sweep that GENERATES a snapshot and proves a rebuild's inputs all survive. Sibling of tlamatini-self-update-inclusion (which guards the runnable release).",
+    "bytes": 29708,
+    "sha256": "d06bc7bf6ede9aa9fc27d5b1f4f1fea08bc55ee199d6d4eaaab75e776e7785a9"
+  },
+  {
+    "path": ".claude/skills/tlamatini-self-update-inclusion/SKILL.md",
+    "name": "tlamatini-self-update-inclusion",
+    "description": "Sweep the whole codebase and keep the SELF-UPDATE pipeline complete — so every new asset/feature added to Tlamatini is actually carried into a release by build.py AND survives (or is correctly replaced by) the self-update swap. Invoke whenever you add/rename a new agent, top-level file or directory, dependency, bundled runtime, migration, static/template asset, or any \"ship it next to the exe\" artifact — and ALWAYS after a feature like Blenderer or the self-update capability lands. Audits the three files that own the pipeline (build.py, agent/self_update.py, apply_update.ps1) against four hard invariants, with a runnable sweep script that never forgets the minimal thing. Pairs with copy_source_assets.py (the self-modify snapshot) and VERSIONING.md.",
+    "bytes": 40753,
+    "sha256": "bd498628dd5363f5573eb6e3a3c5c9223a0f815c1cf05d0e9332aff1d7dc27a0"
+  },
+  {
+    "path": ".codex/skills/full-project-pdf-dossier/SKILL.md",
+    "name": "full-project-pdf-dossier",
+    "description": "Use when asked to create or update a complete project PDF dossier, app summary, architecture report, or repository documentation PDF that must describe the whole system, how it works, how to use it, the complete tracked file tree, effective line counts by language excluding comments/blanks/docstrings, latest changes, and validation evidence.",
+    "bytes": 9521,
+    "sha256": "7369b8be67863b896e9c63ed8430f7bff191241a69d8945055a3d27e8168ce3a"
+  },
+  {
+    "path": ".codex/skills/overlap-safe-pptx-dossier/SKILL.md",
+    "name": "overlap-safe-pptx-dossier",
+    "description": "Use when asked to create or update a complete technical PPTX deck, especially a Tlamatini-style presentation, where slides must describe the whole system, architecture, usage, line inventory, complete file tree, and must never contain overlapping text, images, cards, tables, or diagrams.",
+    "bytes": 8730,
+    "sha256": "a58ebd75d4adb4872445e0161c545aaea8c3a4aef8938d3a46a82626efd5352f"
+  },
+  {
+    "path": ".codex/skills/tlamatini-release-validation/SKILL.md",
+    "name": "tlamatini-release-validation",
+    "description": "Validate a real Tlamatini Windows release through clean installation, administration, chat, Prompt Flow Panel, Agentic Control Panel, and lifecycle tests. Use for release acceptance or installation and panel regressions.",
+    "bytes": 6913,
+    "sha256": "b4cacc3f691b77591d4615df32f67bd6a22d229f5cedc78d6018610f07e08637"
+  },
+  {
+    "path": ".gemini/skills/tlamatini-agent-creation/SKILL.md",
+    "name": "tlamatini-agent-creation",
+    "description": "The authoritative, exhaustive end-to-end runbook for creating a BRAND-NEW Tlamatini workflow agent — every surface, in order, with 530+ numbered steps across 26 phases. Invoke whenever Angela says \"create a new agent\", \"add an agent\", \"make a <X>er agent\", \"I want a new canvas agent\", or asks to wire any new pool agent across backend + frontend + Multi-Turn + Parametrizer + FlowCreator + FlowHypervisor + watchdog + config dialog + demo prompts + Python tests + Playwright harness tests + docs + packaging. Covers naming, coloring, the inputs/outputs connector contract in agentic_control_panel.html, the Multi-Turn (wrapped chat-agent) tool, Exec Report, the configuration dialog, automated unit tests AND Playwright tests in Claude's harness. Pairs with tlamatini-agent-naming (casing) and the @-imported create_new_agent.md / create_new_mcp.md.",
+    "bytes": 110689,
+    "sha256": "9d9b03986558b5caa40b557891c94c7ca133327d48a7d109a610116e1894bb9b"
+  },
+  {
+    "path": ".gemini/skills/tlamatini-agent-naming/SKILL.md",
+    "name": "tlamatini-agent-naming",
+    "description": "The authoritative Tlamatini agent NAMING CONVENTION — invoke before adding, renaming, casing, displaying, or auditing any workflow agent (STM32er, Node Manager, ACPXer, Kalier, ...). Use whenever you touch agentDescription, a pool/agent directory, a CSS .canvas-item class, a JS connection handler, agents_descriptions.md, or any place an agent name is shown. Prevents mis-casing display names (e.g. STM32er must never become STM32Er/STM32ER/Stm32Er).",
+    "bytes": 8519,
+    "sha256": "ea201b2306ddd89e8f6d572e4971c6adf729af42e0fc761efe37e49d08c7b9f5"
+  },
+  {
+    "path": ".gemini/skills/tlamatini-daily-chat-test/SKILL.md",
+    "name": "tlamatini-daily-chat-test",
+    "description": "Run the daily automated Tlamatini chat regression — drive a visible Chrome via Playwright, log into agent_page.html, ask up to 1000 curated safe questions one-by-one (Multi-Turn ON, ACPX/Ask-Execs/Exec-Report/Internet OFF), wait for and qualify each answer (heuristic + LLM judge on failures), then write a dated report + summary. Invoke when the user says \"run the daily chat test\", \"test Tlamatini with the 1000 questions\", \"daily Tlamatini regression\", or schedules this test.",
+    "bytes": 31544,
+    "sha256": "d573cf9b717a903228773d10e2566a7a51fa59530280ee2e0706bab4662e8f67"
+  },
+  {
+    "path": ".gemini/skills/tlamatini-self-modify-inclusion/SKILL.md",
+    "name": "tlamatini-self-modify-inclusion",
+    "description": "Sweep the whole codebase and keep the SELF-MODIFY source snapshot complete — so the TlamatiniSourceCode/ tree that a `--self-modify` build ships carries every source/build asset Tlamatini needs to read, modify, and REBUILD herself, with heavy media/secrets correctly omitted+redacted and omitted binaries listed in the restore manifest. Invoke whenever you add/rename a new agent, source file, top-level dir, dependency, build input, prompt/identity file, migration, static/template asset, or any rebuild input — and ALWAYS after a feature like Blenderer or the self-update capability lands. Owns copy_source_assets.py and audits it against five invariants with a runnable sweep that GENERATES a snapshot and proves a rebuild's inputs all survive. Sibling of tlamatini-self-update-inclusion (which guards the runnable release).",
+    "bytes": 29708,
+    "sha256": "d06bc7bf6ede9aa9fc27d5b1f4f1fea08bc55ee199d6d4eaaab75e776e7785a9"
+  },
+  {
+    "path": ".gemini/skills/tlamatini-self-update-inclusion/SKILL.md",
+    "name": "tlamatini-self-update-inclusion",
+    "description": "Sweep the whole codebase and keep the SELF-UPDATE pipeline complete — so every new asset/feature added to Tlamatini is actually carried into a release by build.py AND survives (or is correctly replaced by) the self-update swap. Invoke whenever you add/rename a new agent, top-level file or directory, dependency, bundled runtime, migration, static/template asset, or any \"ship it next to the exe\" artifact — and ALWAYS after a feature like Blenderer or the self-update capability lands. Audits the three files that own the pipeline (build.py, agent/self_update.py, apply_update.ps1) against four hard invariants, with a runnable sweep script that never forgets the minimal thing. Pairs with copy_source_assets.py (the self-modify snapshot) and VERSIONING.md.",
+    "bytes": 40753,
+    "sha256": "bd498628dd5363f5573eb6e3a3c5c9223a0f815c1cf05d0e9332aff1d7dc27a0"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/acp_router/SKILL.md",
+    "name": "acp-router",
+    "description": "Route plain-language requests for Claude Code, Cursor, Codex, Gemini, Qwen, Pi, Kiro, Kimi, iFlow, Factory Droid, Kilocode, OpenCode, Copilot into ACPX child sessions via acp_spawn. Pick the right agentId for the user's intent.",
+    "bytes": 5620,
+    "sha256": "c2a3d3dea795fa7bf778cb132ed2008d315ad31952dc3f312603caad7ed778bd"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/adding_external_mcp/SKILL.md",
+    "name": "adding-external-mcp",
+    "description": ">",
+    "bytes": 11916,
+    "sha256": "64f7cfabfecf2935a368fdba3dd7c5081665ddc9d239c388c46aec051aa66c5f"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/code_review/SKILL.md",
+    "name": "code-review",
+    "description": "Review a git diff (or working-tree changes) like a senior engineer — correctness, security, performance, readability — and return a verdict plus structured, line-anchored findings.",
+    "bytes": 7361,
+    "sha256": "64c520bc160e1074928707e1bc12103e137140f4e7b0bc1122421b941ceec7c6"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/create_new_agent/SKILL.md",
+    "name": "create-new-agent",
+    "description": "The authoritative 8-step contract for scaffolding a NEW Tlamatini workflow agent end-to-end (backend script + config.yaml, connection-update view + URL, migration seeding the Agent row, CSS gradient, four JS files, agentic_skill.md, README.md, lint). READ THIS BEFORE adding or renaming any of the 89 visual agents, before touching `agent/agents/<name>/`, before writing a `00NN_add_<name>.py` migration, before adding a `.canvas-item.<x>-agent` rule, or before extending the `acp-*.js` classMap / connectors. Companion to the `tlamatini-new-acp-agent` skill (which drives the procedure) and to `tlamatini-agent-naming` (the naming-convention guard).",
+    "bytes": 11279,
+    "sha256": "67ac9ff315d65524566d037db6a5f0411817eeb14c66238cc803a4db0e66cbfe"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/create_new_mcp/SKILL.md",
+    "name": "create-new-mcp",
+    "description": "The authoritative reference for adding a NEW tool, MCP context provider, or BOTH to Tlamatini. READ THIS BEFORE registering a `@tool` in `tools.py`, before creating an `mcp_*_server.py` + `chain_*_lcel.py` pair, before seeding a `Tool` or `Mcp` row in a migration, before extending `factory.py`, or before touching the MCP/Tool checkboxes. Covers the three classes (tool-only / MCP-backed context provider / both), the tool-vs-MCP terminology distinction (`get_mcp_tools()` returns LangChain tools, NOT MCP services), and the known hardcoded assumptions in `factory.py` and the frontend.",
+    "bytes": 9809,
+    "sha256": "f459ae710112b59342c1cd31b9ef39738c44bd0075368b3237363dcbdb5b2587"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/flow_making/SKILL.md",
+    "name": "flow-making",
+    "description": "Turn a natural-language objective into a downloadable .flw workflow by driving the FlowCreator engine (full 89-agent catalog), then emit a canvas-loadable .flw.",
+    "bytes": 9555,
+    "sha256": "fe2e21feb00b4f6474951ee3a57ee57fdb7a5b14eccc6fcc58dc1ee59bfaa3b2"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/github/SKILL.md",
+    "name": "github",
+    "description": "Use the gh CLI for GitHub issues, PR status, CI/logs, comments, reviews, releases, and API queries.",
+    "bytes": 3126,
+    "sha256": "a22f28989f8d93e151e1b9b5289e3de656cade8963ab4c6e1169bbcdd88a66cd"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/gmail/SKILL.md",
+    "name": "gmail",
+    "description": "Read and send Gmail messages and threads via Gmail API.",
+    "bytes": 2480,
+    "sha256": "4fba04c4ae4dcfbc473cf99be37ced36c4e658c0f0a521bcfab87ccc0487e16c"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/hello_world/SKILL.md",
+    "name": "hello-world",
+    "description": "Smoke-test skill that echoes its inputs and confirms the SkillHarness wiring is alive end-to-end.",
+    "bytes": 2281,
+    "sha256": "9c073b5f131097be5f9b349b2880f344b7591d5d0c898514e7c9fd62410d9b2e"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/jira/SKILL.md",
+    "name": "jira",
+    "description": "Read and write Jira issues, comments, transitions via the Jira REST API v3.",
+    "bytes": 2639,
+    "sha256": "f42e58945f36d02b8b91120705975533db8211340ee0aa30b3528ff73baca489"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/kali_pentest/SKILL.md",
+    "name": "kali-pentest",
+    "description": "Drive an authorized, scoped penetration-testing / recon / CTF workflow against a target through the Kalier agent and the MCP-Kali-Server — health-probe, port/service scan (nmap), service-specific enumeration (gobuster/dirb/nikto/sqlmap/wpscan/enum4linux), credential/hash attacks (hydra/john), optional Metasploit, then a written findings report. Authorized targets only.",
+    "bytes": 8595,
+    "sha256": "4501603ee1dec9ee8900d0e67584e4f5fc382d92dd4d16ab23a8646454cc863f"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/notion/SKILL.md",
+    "name": "notion",
+    "description": "Use the Notion API to create, read, update Notion pages, data sources (databases), and blocks.",
+    "bytes": 2953,
+    "sha256": "be2ee9433ede54cbbb301bb8dc1f91c0f2641840104cad161406d053d2c1088f"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/roblox_studio/SKILL.md",
+    "name": "roblox-studio",
+    "description": "Build and edit in Roblox Studio via the Roblox Studio MCP the RIGHT way - preflight the Studio connection, do the whole build in a few big execute_luau scripts (not dozens of tiny calls), make REALISTIC terrain with the Terrain VOXEL api driven by Perlin noise (NEVER stacked Parts or concentric layers - those give ugly blocky stepped pyramids), poll generative jobs, check the console, and fail honestly. Invoke for ANY \"in Roblox / Roblox Studio\" request - terrain, mountains, parts, scripts, models, materials, assets.",
+    "bytes": 10694,
+    "sha256": "e88f2f2db23b7d16e932c266ef216d564b27ec7ec790dad93521c1f59562955a"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/security_audit/SKILL.md",
+    "name": "security-audit",
+    "description": "Run whichever SAST, secret-scanning, and dependency-audit tools are installed (bandit, semgrep, ruff, eslint, gitleaks, pip-audit) over a path, then return aggregated findings, severity counts, and a prioritised remediation summary.",
+    "bytes": 5954,
+    "sha256": "c7b867295211c4f96c6a5e30016d5eb6911bc46984262c24f32afb13b85d4edb"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/setup_new_acpx_key/SKILL.md",
+    "name": "setup-new-acpx-key",
+    "description": "Configure the API key (or other credential) for a registered ACPX agent_id (claude/codex/cursor/gemini/qwen/copilot/pi/droid/iflow/kilocode/kimi/kiro/opencode/tlamatini) end-to-end across data.keys, config.json (top-level + acpx.agents.<id>.env), regen_secrets.py, and verification via acp_doctor.",
+    "bytes": 11109,
+    "sha256": "95ad16b8a168adaef1d19f2ece234d3eafe8b98b17995d9afa66b2063f97bff4"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/skill_creator/SKILL.md",
+    "name": "skill-creator",
+    "description": "Create, edit, validate, and package new Tlamatini skills (SKILL.md packages).",
+    "bytes": 5546,
+    "sha256": "2c65a2e5623f54689c3137174b83e03bd5c10d3aafecba7a439fd18d57f623be"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/slack/SKILL.md",
+    "name": "slack",
+    "description": "Post messages, read channels, and manage threads via Slack Web API.",
+    "bytes": 2503,
+    "sha256": "59a783be6343aa8c996271ccd3d3d777aff6a71411fdd0403b7c95e3fb776792"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/summarize/SKILL.md",
+    "name": "summarize",
+    "description": "Summarize a long text or file into a tight, faithful brief at a target word count.",
+    "bytes": 2605,
+    "sha256": "f5d91f28f7f2bec28c2631a0fc295cf62cfd14cbef8253fe16f961a9934ef178"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_allowed_hosts_tighten/SKILL.md",
+    "name": "tlamatini-allowed-hosts-tighten",
+    "description": "Tighten Django ALLOWED_HOSTS from the wide-open '*' default to a specific list, with a backup of settings.py.",
+    "bytes": 2933,
+    "sha256": "16dd67157c355020f9f31b3ddfbd9b6bde977b4539703a2d2caa2ff5896e2599"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_csrf_exempt_audit/SKILL.md",
+    "name": "tlamatini-csrf-exempt-audit",
+    "description": "Enumerate every @csrf_exempt-decorated view in Tlamatini/agent/views.py and classify whether each one really needs the exemption.",
+    "bytes": 4691,
+    "sha256": "aca3c12157946db59a243e82a4a0c1b2ec14766694e230753070578a8e13010e"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_exec_report_row_adder/SKILL.md",
+    "name": "tlamatini-exec-report-row-adder",
+    "description": "Add a state-changing tool to _EXEC_REPORT_TOOLS in mcp_agent.py and the matching CSS rules so its operations appear in the chat-page Exec Report.",
+    "bytes": 4693,
+    "sha256": "edd9ddcd4a8b6de675e52abc29ba0134cc4ee62fcd379cd8bcfebd647143f866"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_flow_from_objective/SKILL.md",
+    "name": "tlamatini-flow-from-objective",
+    "description": "Turn a one-sentence objective into a downloadable .flw workflow that wires the right Tlamatini visual agents and connections.",
+    "bytes": 6940,
+    "sha256": "dad354cb18ae6c829209f36e9759eabe21b6947edd55cca9ec5d47d527b6c014"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_flw_doctor/SKILL.md",
+    "name": "tlamatini-flw-doctor",
+    "description": "Validate a .flw workflow file: check connection topology, terminal agents, Parametrizer single-lane queue, missing connectors, dangling target_agents.",
+    "bytes": 6741,
+    "sha256": "867c4124eb673586870d08e1254865b2966ae414c9c28ff64f039876fd08c315"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_new_acp_agent/SKILL.md",
+    "name": "tlamatini-new-acp-agent",
+    "description": "Scaffold a new Tlamatini visual agent end-to-end across the 8 places the agent contract requires (script + config.yaml, view + url, migration, CSS gradient, 4 JS files, agentic_skill.md, README.md, lint).",
+    "bytes": 8568,
+    "sha256": "373e7ff10c5d264ccf48e2147a2f31a0cc32bcf2f4328eeacb683482fd3819ac"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_planner_trace_replay/SKILL.md",
+    "name": "tlamatini-planner-trace-replay",
+    "description": "Replay the most recent global execution planner trace from tlamatini.log and explain why each capability got the score it did.",
+    "bytes": 4844,
+    "sha256": "bd9cfad397d4f88e2909e7989117da52c6bbce6714132d3cf314c92e8d7ef438"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/tlamatini_static_version_bumper/SKILL.md",
+    "name": "tlamatini-static-version-bumper",
+    "description": "Bump STATIC_VERSION in tlamatini/settings.py so the chat / ACP frontend re-fetches CSS+JS bundles after a frontend change.",
+    "bytes": 5580,
+    "sha256": "5259d1708e3938749f4c25cde61414c3200f2b8be3b9437768ddd459d2241fb3"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/todoist/SKILL.md",
+    "name": "todoist",
+    "description": "Manage Todoist tasks and projects via the Todoist REST API v2.",
+    "bytes": 2440,
+    "sha256": "c672b71c4f86e1a056d74dab3b390b1f04c79c0de468b007a4a8ff491891548f"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/trello/SKILL.md",
+    "name": "trello",
+    "description": "Manage Trello boards, lists, and cards via the Trello REST API.",
+    "bytes": 2460,
+    "sha256": "aba03c0a429c2ad7ac1c6da6d1874c11695b4e937797919699548baeac6ba271"
+  },
+  {
+    "path": "Tlamatini/agent/skills_pkg/weather/SKILL.md",
+    "name": "weather",
+    "description": "Look up current weather and short forecast for a location via Open-Meteo (no API key required).",
+    "bytes": 2394,
+    "sha256": "8f6d92caacf4b6db99a8de279f567be82dd8a84171e374314cabad96eedf0a03"
+  }
+]

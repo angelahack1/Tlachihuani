@@ -1,0 +1,38 @@
+# Lifecycle foundation — 2026-10-11
+
+This page distinguishes working code from the broader design. No SCM service, registry startup entry, local Git repository or GitHub repository was created. Tlamatini remains a separate, read-only checkout at `C:\Development\XAIHT\Tlamatini`, https://github.com/XAIHT/Tlamatini.
+
+## Implemented
+
+| Component | Current behavior |
+|---|---|
+| Contracts | Snake-case JSON; four-byte little-endian length; 64 KiB maximum; depth 16; version, operation, request ID, cursor and limit validation |
+| Core | Independent health/SCM states; heartbeat every two seconds; boot instance ID; last 256 events; idempotent Start/Stop and ordered Restart with deadlines |
+| Windows | Fixed-name own-process SCM adapter; quoted image-path validation; live pipe PID/image/held-process identity; restricted global mutation mutex |
+| Service | Microsoft Windows-service lifetime; 16 reusable local-only pipe instances; three-second exchanges; ready event; bounded cancellation; console mode must be explicit |
+| Client/Control | Synchronous status/events/start/stop/restart; one JSON envelope; documented exit codes; missing service reported honestly; no implicit install/elevation |
+| Tray | Original XT icon; one companion per Windows session; slate/teal status window; nonblocking polling and lifecycle actions; independent Close/Exit; configurable loopback Tlamatini URL |
+| Packaging | Framework-dependent publish; explicit first-install, registration removal and per-user logon scripts; scripts require verified foreground development console |
+
+The pipe's DACL grants the selected operator data read/write rights without permission to create another pipe instance. SYSTEM, administrators and the service identity can administer the endpoint. The kernel rejects remote clients. Client SQOS is identification-only. Pipe observations verify the live server process before accepting data; installed mode additionally checks SCM. The separate development endpoint is never reported as an installed/running SCM service.
+
+Protocol clarification from live testing: after reading a complete framed reply, a client sends byte `0x06`. The server waits within the same three-second deadline before disconnecting. Without this acknowledgement, Windows can discard unread reply bytes when an instance is reused. No second request is dispatched on that connection. Semantically invalid requests receive a correlated error; malformed/oversized frames are disconnected. The CLI forwards `next_cursor` and `cursor_expired` for events.
+
+Start/Stop/Restart operate entirely through SCM and do not wait for pipe health. Their 30-second deadline returns failure/timeout rather than guessing success or killing a process. Mutations serialize across processes through a Windows mutex restricted to the configured operator, administrators and SYSTEM. Synchronous results use `request_id`; persistent `operation_id` receipts and automatic retries are not part of this foundation. Do not retry Restart blindly after a controller disconnect.
+
+## Verification
+
+See [the dated verification record](verification/2026-10-11-foundation.md) for exact checks, results, initial defects and limitations. Tests execute visibly, including the temporary real service-host process. That process shuts itself down after 12 seconds and is never registered with SCM. The tray's native status window was inspected on the real desktop; shell notification-area positioning remains Windows-controlled.
+
+NuGet is the sole package source. `Microsoft.Extensions.Hosting.WindowsServices` is pinned to `10.0.12`, SDK to `10.0.401` (latest patch roll-forward), and transitive dependencies are locked. NuGet audit is enabled. No Snyk scan, hook, skill or package is used. Microsoft references: [Worker services on Windows](https://learn.microsoft.com/en-us/dotnet/core/extensions/windows-service), [named-pipe ACLs](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights), [package metadata](https://www.nuget.org/packages/Microsoft.Extensions.Hosting.WindowsServices/10.0.12).
+
+## Not implemented or not accepted yet
+
+- Actual installed-service acceptance, cross-account/remote-pipe tests, reboot/sign-out tests and Explorer restart verification. Current token is unelevated; native installation was not performed.
+- Force termination, UAC/host consent, elevated helper, durable receipts and restart request deduplication. `force_stop` is explicitly false.
+- Signed release installer, update/repair/rollback and automatic file cleanup on uninstall. Scripts are a reviewable first-install foundation, not a certified release installer.
+- Persistent service-specific log files and the proposed local-log menu. Installed hosting diagnostics use the Windows Application log (`.NET Runtime` source); the activity ring is ephemeral.
+- The proposed tray consent IPC and full Tlamatini panel. Double-click currently opens the native status window; the optional menu link opens an existing Tlamatini URL, without assuming its port or adding a panel route.
+- Functional business workload. The service only demonstrates lifecycle, readiness and heartbeat.
+
+These limitations must remain visible in future handoffs; source/console tests do not certify a Windows installation.
