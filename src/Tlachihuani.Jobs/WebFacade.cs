@@ -54,6 +54,7 @@ internal static class WebFacade
             await next();
         });
         app.UseDefaultFiles(); app.UseStaticFiles();
+        app.MapGet("/controllers", WorkspaceControllers.Available);
         app.MapMethods("/api/v1/{**route}", ["GET", "POST", "PATCH", "DELETE"], async (HttpContext ctx, string? route) =>
         {
             var req = ctx.Request;

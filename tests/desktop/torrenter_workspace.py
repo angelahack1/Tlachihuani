@@ -1,8 +1,12 @@
 """Headed browser acceptance. Uses a private, tracker-free fixture with no remote peers."""
 
 import argparse
+import getpass
+import os
+import re
+from urllib.parse import urlparse
 import ctypes
-from hashlib import sha1
+from hashlib import file_digest, sha1
 import json
 from pathlib import Path
 import socket
@@ -40,7 +44,82 @@ def foreground_browser():
     )
 
 
-def check(exe, installed, work, tray_pid=None):
+def verify_workspace_geometry(page):
+    """Measure the real viewport; a footer above spare page space is a failure."""
+    box = page.evaluate("""() => {
+        const grid=document.querySelector('#transfer-grid');
+        return {height:innerHeight,width:innerWidth,
+          footer:document.querySelector('footer').getBoundingClientRect().bottom,
+          pageWidth:document.body.scrollWidth,
+          gridHeight:grid.clientHeight,gridContent:grid.scrollHeight,
+          gridWidth:grid.clientWidth,gridContentWidth:grid.scrollWidth,
+          selected:document.body.classList.contains('detail-open'),
+          rows:document.querySelectorAll('#rows tr').length};
+    }""")
+    assert abs(box['footer'] - box['height']) <= 2, box
+    assert box['pageWidth'] <= box['width'] + 1, box
+    if not box['selected'] and box['height'] >= 900 and box['width'] >= 1600 and box['rows'] <= 10:
+        assert box['gridContent'] <= box['gridHeight'] + 1, box
+        assert box['gridContentWidth'] <= box['gridWidth'] + 1, box
+    print('PASS workspace viewport and footer:', json.dumps(box), flush=True)
+
+
+def verify_saved_downloads(page, username, expected):
+    """Verify the signed-in controller's manifests against the current user's actual files."""
+    base = page.url.rstrip("/") + "/"
+    identity = page.request.get(base + "session/")
+    assert identity.ok, identity.status
+    identity = identity.json()
+    assert identity["username"] == username, "The workspace account changed"
+    account = uuid.UUID(identity["profile"]).hex
+    headers = {"X-Torrenter-Profile": identity["profile"]}
+
+    def get(route):
+        response = page.request.get(base + "api/v1/" + route, headers=headers, max_redirects=0)
+        assert response.ok, (route, response.status)
+        return response.json()
+
+    folder = (ctypes.c_byte * 16).from_buffer_copy(uuid.UUID("374DE290-123F-4565-9164-39C4925E467B").bytes_le)
+    name = ctypes.c_void_p()
+    ctypes.OleDLL("shell32").SHGetKnownFolderPath(ctypes.byref(folder), 0, None, ctypes.byref(name))
+    try:
+        root = Path(ctypes.wstring_at(name)).resolve(strict=True) / "Torrenter" / account
+    finally:
+        ctypes.windll.ole32.CoTaskMemFree(name)
+
+    complete = []
+    cursor = 0
+    while True:
+        batch = get(f"torrents?limit=250&cursor={cursor}")
+        complete.extend(row for row in batch["items"] if row["completed_at"])
+        after = batch.get("next_cursor")
+        if after is None:
+            break
+        assert isinstance(after, int) and after > cursor, "Queue cursor did not advance"
+        cursor = after
+    assert len(complete) == expected, (expected, len(complete))
+    checked = 0
+    for job in complete:
+        job_id = job["job_id"]
+        assert re.fullmatch(r"[a-f0-9]{32}", job_id), job_id
+        manifest = get(f"torrents/{job_id}/manifest")
+        assert manifest.get("verified") and manifest.get("download_verified") and manifest.get("delivery_state") == "saved", (
+            job["name"], manifest.get("delivery_state"), manifest.get("delivery_error"))
+        directory = Path(manifest["output_root"]).resolve(strict=True)
+        assert directory == root / job_id, (directory, root, job_id)
+        assert manifest["files"], ("Empty verified manifest", job_id)
+        for item in manifest["files"]:
+            path = (directory / item["path"]).resolve(strict=True)
+            assert path.is_relative_to(directory) and path.is_file(), path
+            with path.open("rb") as actual:
+                assert os.fstat(actual.fileno()).st_size == item["size"], path
+                assert file_digest(actual, "sha256").hexdigest() == item["sha256"], path
+            checked += 1
+            print("VERIFIED", username, path, item["size"], item["sha256"], flush=True)
+    print(f"PASS: {checked} readable files in {len(complete)} completed jobs for {username}: {root}", flush=True)
+
+
+def check(exe, installed, work, controller, username, verify_completed=None):
     ident = uuid.uuid4().hex
     port = 12064
     service = None
@@ -70,34 +149,38 @@ def check(exe, installed, work, tray_pid=None):
             lambda: urllib.request.urlopen(origin + "/api/v1/health", timeout=1).read()
         )
         with sync_playwright() as driver:
-            browser = driver.chromium.launch(channel="chrome", headless=False)
+            browser = driver.chromium.launch(channel="chrome", headless=False, args=["--start-maximized"])
             try:
-                page = browser.new_page(viewport={"width": 1280, "height": 850})
+                page = browser.new_page(no_viewport=True)
                 page.bring_to_front()
                 eventually(foreground_browser)
                 errors = []
                 page.on("pageerror", lambda exc: errors.append(str(exc)))
-                page.goto(origin)
-                expect(
-                    page.get_by_role("heading", name="Torrenter", exact=True)
-                ).to_be_visible()
-                page.get_by_role("button", name="Request pairing code").click()
-                code = page.locator("#code")
-                expect(code).to_have_text(__import__("re").compile(r"^\d{8}$"))
-                if tray_pid:
-                    import importlib.util
-
-                    spec = importlib.util.spec_from_file_location(
-                        "xt_pairing", Path(__file__).with_name("xt_pairing.py")
-                    )
-                    panel = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(panel)
-                    panel.approve(tray_pid, code.inner_text())
-                    page.bring_to_front()
-                else:
-                    assert native({"op": "approve", "code": code.inner_text()})["body"][
-                        "approved"
-                    ]
+                if not installed:
+                    info = page.request.get(origin + "/controllers")
+                    assert info.ok and isinstance(info.json(), list)
+                    assert page.request.post(origin + "/api/v1/session-challenges", data={}).status == 401
+                    print("PASS private download host discovery and authenticated boundary", flush=True)
+                    return
+                if urlparse(controller).hostname != "127.0.0.1" or urlparse(controller).scheme != "http":
+                    raise ValueError("Use a loopback Tlamatini development server.")
+                page.goto(controller.rstrip("/") + "/agent/torrenter/workspace/")
+                page.locator("#id_username").fill(username)
+                page.locator("#id_password").fill(os.getenv("TLAMATINI_TORRENTER_TEST_PASSWORD") or getpass.getpass("Development account password: "))
+                page.locator("form button[type=submit], form input[type=submit]").first.click()
+                heading = page.get_by_role("heading", level=1, name=username, exact=True)
+                expect(heading).to_be_visible()
+                page.reload()
+                expect(heading).to_be_visible()
+                expect(page.locator('#workspace')).to_be_visible()
+                verify_workspace_geometry(page)
+                if verify_completed is not None:
+                    verify_saved_downloads(page, username, verify_completed)
+                    assert not errors, errors
+                    return
+                expect(page.locator("#transfer-grid thead")).not_to_contain_text(
+                    re.compile(r"\b(?:User|Usuario)\b")
+                )
                 expect(
                     page.get_by_role("button", name="＋ Add torrent")
                 ).to_be_visible()
@@ -105,8 +188,9 @@ def check(exe, installed, work, tray_pid=None):
                 page.locator("#column").select_option("2")
                 page.get_by_role("button", name="Move right").click()
                 page.locator("#preferences").get_by_role("button", name="Close").click()
+                verify_workspace_geometry(page)
                 print(
-                    "PASS headed Chrome: real pairing, workspace and layout preferences",
+                    "PASS headed Chrome: signed-in workspace, refresh and layout preferences",
                     flush=True,
                 )
                 name = ("tlachihuani-ui-" + ident[:12] + ".bin").encode()
@@ -177,11 +261,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("executable", type=Path)
     parser.add_argument("--installed", action="store_true")
-    parser.add_argument(
-        "--tray-pid",
-        type=int,
-        help="Use the real visible installed XT panel for approval",
-    )
+    parser.add_argument("--controller", default="http://127.0.0.1:8000")
+    parser.add_argument("--username", default="")
+    parser.add_argument("--verify-completed", type=int, metavar="COUNT",
+                        help="Verify every file in COUNT existing completed jobs without adding or removing a job.")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="tlachihuani-browser-") as work:
-        check(args.executable.resolve(), args.installed, Path(work), args.tray_pid)
+    if args.installed and not args.username:
+        parser.error("Installed acceptance requires a development account username.")
+    if args.verify_completed is not None and (not args.installed or args.verify_completed < 1):
+        parser.error("--verify-completed requires --installed and a positive job count.")
+    scratch = Path(__file__).resolve().parents[2] / "artifacts" / "verification"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch, prefix="workspace-") as work:
+        check(args.executable.resolve(), args.installed, Path(work), args.controller, args.username, args.verify_completed)

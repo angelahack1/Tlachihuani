@@ -17,6 +17,12 @@
           "Tlachihuani.Contracts": "[0.1.0, )"
         }
       },
+      "tlachihuani.tray": {
+        "type": "Project",
+        "dependencies": {
+          "Tlachihuani.Client": "[0.1.0, )"
+        }
+      },
       "tlachihuani.windows": {
         "type": "Project",
         "dependencies": {

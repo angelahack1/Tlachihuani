@@ -38,6 +38,7 @@ try
         var installation = Installation.Load();
         if (!string.Equals(Path.GetFullPath(Environment.ProcessPath!), Path.GetFullPath(installation.ServicePath), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The service image does not match the installation manifest.");
+        OperatorProcessAccess.AllowIdentityCheck(installation.OperatorSid);
         installationId = installation.InstallationId; pipeName = installation.PipeName; operatorSid = installation.OperatorSid;
     }
     var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings { Args = [], ContentRootPath = AppContext.BaseDirectory });

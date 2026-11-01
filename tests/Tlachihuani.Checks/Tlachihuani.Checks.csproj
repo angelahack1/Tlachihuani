@@ -1,4 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
-  <ItemGroup><ProjectReference Include="../../src/Tlachihuani.Client/Tlachihuani.Client.csproj" /></ItemGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><UseWindowsForms>true</UseWindowsForms></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Tlachihuani.Tray/Tlachihuani.Tray.csproj" /></ItemGroup>
 </Project>

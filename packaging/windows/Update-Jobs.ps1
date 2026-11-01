@@ -1,10 +1,11 @@
 # Upgrade the registered Jobs service without changing its operator or durable state.
-param([switch]$UpdateTray)
+param([switch]$UpdateTray, [switch]$VerifyOnly)
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\..\..\scripts\Assert-Visible.ps1"
 . "$PSScriptRoot\JobsPayload.ps1"
 Assert-VisibleDevelopmentConsole
-if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+if ($VerifyOnly -and $UpdateTray) { throw 'VerifyOnly checks the installed Jobs payload; omit UpdateTray.' }
+if (!$VerifyOnly -and !([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Use an elevated foreground PowerShell console.'
 }
 $program = Join-Path $env:ProgramFiles 'XAIHT\Tlachihuani'
@@ -29,8 +30,37 @@ if ($initial.State -notin @('Running','Stopped')) { throw 'Wait for Jobs to fini
 if ($UpdateTray -and (Get-Process -Name Tlachihuani.Tray -ErrorAction SilentlyContinue | Where-Object Path -eq (Join-Path $tray 'Tlachihuani.Tray.exe'))) {
     throw 'Exit the installed XT tray before upgrading it.'
 }
-foreach ($leaf in @('Jobs\Tlachihuani.Jobs.exe','Jobs\runtime\python.exe','Jobs\worker\worker.py','Jobs\wwwroot\index.html','Tray\Tlachihuani.Tray.exe')) {
-    if (!(Test-Path -LiteralPath (Join-Path $package $leaf) -PathType Leaf)) { throw "Missing published $leaf." }
+$required = @('Tlachihuani.Jobs.exe','Tlachihuani.Jobs.dll','Tlachihuani.Windows.dll',
+    'runtime\python.exe','worker\worker.py','worker\api.py','worker\engine.py',
+    'worker\storage.py','worker\delivery.py','wwwroot\index.html')
+function Get-PayloadDigest([string]$file) {
+    $stream = [IO.File]::OpenRead($file)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','') }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
+$digests = @{}
+foreach ($leaf in $required) {
+    $file = Join-Path (Join-Path $package 'Jobs') $leaf
+    if (!(Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing published Jobs\$leaf." }
+    $digests[$leaf] = Get-PayloadDigest $file
+}
+if ($UpdateTray -and !(Test-Path -LiteralPath (Join-Path $package 'Tray\Tlachihuani.Tray.exe') -PathType Leaf)) {
+    throw 'Missing published Tray\Tlachihuani.Tray.exe.'
+}
+function Assert-InstalledJobsPayload {
+    foreach ($leaf in $required) {
+        $targetFile = Join-Path $jobs $leaf
+        if (!(Test-Path -LiteralPath $targetFile -PathType Leaf) -or
+            (Get-PayloadDigest $targetFile) -ne $digests[$leaf]) {
+            throw "Verification failed: $targetFile is missing or differs from the published file."
+        }
+    }
+}
+if ($VerifyOnly) {
+    Assert-InstalledJobsPayload
+    Write-Host ("Verified installed Jobs at " + $jobs + "; Downloads worker SHA-256: " + $digests['worker\delivery.py'])
+    return
 }
 # All paths below are new direct siblings under the verified Program Files directory.
 $generation = [guid]::NewGuid().ToString('N')
@@ -52,19 +82,28 @@ try {
         $swapped += $part
         [IO.Directory]::Move((Join-Path $program "$part.new.$generation"),$target)
     }
+    # A status response alone can also come from an older healthy build. Verify
+    # the registered program directory inside the rollback boundary while Jobs
+    # is stopped. Do not print a success receipt for a stale or partial payload.
+    Assert-InstalledJobsPayload
     if ($initial.State -eq 'Running') {
         Start-Service Tlachihuani.Jobs
         $image = Join-Path $jobs 'Tlachihuani.Jobs.exe'
         $ready = $false
         for ($attempt=0; $attempt -lt 12; $attempt++) {
             if ((Get-VerifiedRegistration).State -ne 'Running') { break }
-            $reply = '{"op":"status"}' | & $image --control
+            # Jobs is a Windows-subsystem executable so older windowless callers
+            # cannot flash a console. A downstream command makes PowerShell 5.1
+            # redirect stdout and wait for the native process before checking it.
+            $reply = '{"op":"status"}' | & $image --control | Out-String
             if ($LASTEXITCODE -eq 0 -and ($reply | ConvertFrom-Json).provider -eq 'torrenter') { $ready=$true; break }
             Start-Sleep -Seconds 1
         }
         if (!$ready) { throw 'Updated host did not answer its authenticated status check.' }
     }
-    Write-Host "Jobs updated. Previous program files retained under generation $generation."
+    Write-Host "Jobs updated and verified in $jobs. Update ID: $generation"
+    Write-Host ("Downloads worker SHA-256: " + $digests['worker\delivery.py'])
+    Write-Host "Previous program files retained under generation $generation."
 } catch {
     if ((Get-VerifiedRegistration).State -eq 'Running') { Stop-Service Tlachihuani.Jobs }
     [array]::Reverse($swapped)

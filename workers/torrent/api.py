@@ -10,6 +10,8 @@ import time
 from urllib.parse import urlsplit
 
 from engine import endpoint, inspect
+from delivery import plain_path
+import libtorrent as lt
 from storage import Problem, digest, new_id, packed, require, safe_file
 
 SCOPES = "read submit control remove erase"
@@ -26,28 +28,6 @@ class Api:
                 "SELECT count(*) FROM jobs WHERE removed=0"
             ).fetchone()[0]
             return {"records": total, "active": len(self.e.handles)}
-        if op == "approve":
-            challenge = next(
-                (
-                    v
-                    for v in self.j.challenges.values()
-                    if v["code"] == req.get("code") and v["expires"] > time.time()
-                ),
-                None,
-            )
-            require(
-                challenge and not challenge.get("owner"),
-                404,
-                "No pending pairing request with that code.",
-            )
-            profile = req.get("profile", "")
-            require(
-                isinstance(profile, str) and len(profile) <= 128,
-                400,
-                "Invalid account profile.",
-            )
-            challenge["owner"] = owner + "/" + digest(profile) if profile else owner
-            return {"approved": True}
         if op == "issue":
             profile = req.get("profile", "")
             require(
@@ -56,6 +36,16 @@ class Api:
                 "Invalid profile.",
             )
             account = owner if not profile else owner + "/" + digest(profile)
+            if "delivery_root" in req or "delivery_error" in req:
+                # Only JobsHost's authenticated and validated native channel supplies
+                # this destination. REST clients cannot choose host filesystem paths.
+                self.j.db.execute(
+                    "INSERT OR REPLACE INTO delivery_roots VALUES(?,?,?)",
+                    (account, req.get("delivery_root"), req.get("delivery_error")),
+                )
+            if "fallback_root" in req or "fallback_error" in req:
+                self.j.db.execute("INSERT OR REPLACE INTO fallback_roots VALUES(?,?,?)",
+                                  (account, req.get("fallback_root"), req.get("fallback_error")))
             scope = req.get("scope", "read")
             require(
                 isinstance(scope, str) and set(scope.split()) <= set(SCOPES.split()),
@@ -124,82 +114,44 @@ class Api:
             return {"approved": True}
         raise Problem(400, "Unknown native operation.")
 
-    def pair(self, path, b):
+    def delegated(self, b):
         now = int(time.time())
-        if path == "session-challenges":
-            self.j.challenges = {
-                k: v for k, v in self.j.challenges.items() if v["expires"] > now
-            }
-            verifier = b.get("verifier_hash", "")
-            require(
-                isinstance(verifier, str)
-                and len(verifier) == 64
-                and all(c in "0123456789abcdef" for c in verifier),
-                400,
-                "Invalid browser verifier.",
-            )
-            require(
-                len(self.j.challenges) < 8, 429, "Too many pending pairing attempts."
-            )
-            ident = new_id()
-            while True:
-                code = f"{secrets.randbelow(100000000):08d}"
-                if all(v["code"] != code for v in self.j.challenges.values()):
-                    break
-            self.j.challenges[ident] = {
-                "hash": verifier,
-                "code": code,
-                "expires": now + 120,
-            }
-            return 201, {"challenge_id": ident, "code": code, "expires_in": 120}
-        if path == "sessions/delegated":
-            gateway = self.j.db.execute(
-                "SELECT * FROM gateways WHERE id=?", (b.get("gateway_id"),)
-            ).fetchone()
-            require(gateway, 401, "Invalid gateway.")
-            nonce = b.get("nonce", "")
-            expires = b.get("expires", 0)
-            require(
-                isinstance(nonce, str)
-                and 20 <= len(nonce) <= 128
-                and isinstance(expires, int)
-                and now < expires <= now + 90
-                and b.get("account") == gateway["account"],
-                401,
-                "Invalid assertion.",
-            )
-            fields = [
-                gateway["id"],
-                gateway["account"],
-                "Tlachihuani.Torrenter",
-                nonce,
-                expires,
-            ]
-            expected = hmac.new(
-                gateway["secret"].encode(), packed(fields).encode(), hashlib.sha256
-            ).hexdigest()
-            require(
-                hmac.compare_digest(expected, str(b.get("signature", ""))),
-                401,
-                "Invalid assertion.",
-            )
-            used = self.j.db.execute(
-                "INSERT OR IGNORE INTO nonces VALUES(?,?)",
-                (gateway["id"] + nonce, expires),
-            ).rowcount
-            require(used == 1, 401, "Assertion already redeemed.")
-            return 201, self.j.issue(gateway["owner"], gateway["scope"], 300)
-        c = self.j.challenges.get(b.get("challenge_id"))
+        gateway = self.j.db.execute(
+            "SELECT * FROM gateways WHERE id=?", (b.get("gateway_id"),)
+        ).fetchone()
+        require(gateway, 401, "Invalid gateway.")
+        nonce = b.get("nonce", "")
+        expires = b.get("expires", 0)
         require(
-            c
-            and c["expires"] > now
-            and hmac.compare_digest(c["hash"], digest(str(b.get("verifier", "")))),
+            isinstance(nonce, str)
+            and 20 <= len(nonce) <= 128
+            and isinstance(expires, int)
+            and now < expires <= now + 90
+            and b.get("account") == gateway["account"],
             401,
-            "Pairing expired or invalid.",
+            "Invalid assertion.",
         )
-        require("owner" in c, 409, "Waiting for XT approval.")
-        del self.j.challenges[b["challenge_id"]]
-        return 201, self.j.issue(c["owner"], SCOPES, 1800)
+        fields = [
+            gateway["id"],
+            gateway["account"],
+            "Tlachihuani.Torrenter",
+            nonce,
+            expires,
+        ]
+        expected = hmac.new(
+            gateway["secret"].encode(), packed(fields).encode(), hashlib.sha256
+        ).hexdigest()
+        require(
+            hmac.compare_digest(expected, str(b.get("signature", ""))),
+            401,
+            "Invalid assertion.",
+        )
+        used = self.j.db.execute(
+            "INSERT OR IGNORE INTO nonces VALUES(?,?)",
+            (gateway["id"] + nonce, expires),
+        ).rowcount
+        require(used == 1, 401, "Assertion already redeemed.")
+        return 201, self.j.issue(gateway["owner"], gateway["scope"], 300)
 
     def inspection(self, row):
         result = {
@@ -210,7 +162,9 @@ class Api:
         if row["metainfo"]:
             info, files = inspect(row["metainfo"])
             result.update(phase="ready", name=info.name(), files=files)
-        elif row["id"] not in self.e.lookups:
+        elif row["pending"]:
+            result["lookup_state"] = "active" if row["id"] in self.e.lookups else "queued"
+        else:
             result["phase"] = "expired"
         return result
 
@@ -329,12 +283,8 @@ class Api:
             }
         if method == "GET" and path == "health":
             return 200, {"api_version": 1, "engine": "ready"}
-        if method == "POST" and path in (
-            "session-challenges",
-            "sessions",
-            "sessions/delegated",
-        ):
-            return self.pair(path, b)
+        if method == "POST" and path == "sessions/delegated":
+            return self.delegated(b)
         cred = self.j.credential(req.get("authorization", ""))
         owner = cred["owner"]
         scopes = cred["scope"].split()
@@ -421,6 +371,9 @@ class Api:
                 return 200, {
                     "items": items[offset : offset + limit],
                     "total": len(items),
+                    "resolving_metadata": self.j.db.execute(
+                        "SELECT count(*) FROM inspections WHERE owner=? AND pending=1", (owner,)
+                    ).fetchone()[0],
                     "next_cursor": offset + limit
                     if len(items) > offset + limit
                     else None,
@@ -468,6 +421,18 @@ class Api:
             if len(parts) == 2 and parts[0] == "inspections":
                 row = self.get_inspection(owner, parts[1])
                 return 200, self.inspection(row)
+            if len(parts) == 3 and parts[0] == "inspections" and parts[2] == "activity":
+                row = self.get_inspection(owner, parts[1])
+                detail = {**self.inspection(row), **self.source(row["metainfo"], row["magnet"])}
+                lookup = self.e.lookups.get(row["id"])
+                if lookup:
+                    status = lookup[1].status()
+                    detail["discovery"] = {
+                        "known_peers": status.list_peers, "connected_peers": status.num_peers,
+                        "listening": self.e.sessions[owner].is_listening(),
+                        "paused": status.paused, "error_code": status.errc.value(),
+                    }
+                return 200, detail
             if parts[0] == "torrents" and len(parts) in (2, 3):
                 row = self.j.job(owner, parts[1])
                 if len(parts) == 2:
@@ -524,7 +489,7 @@ class Api:
         if method == "POST" and path == "inspections":
             scope("submit")
             active = self.j.db.execute(
-                "SELECT count(*) FROM inspections WHERE owner=? AND expires>?",
+                "SELECT count(*) FROM inspections WHERE owner=? AND (pending=1 OR expires>?)",
                 (owner, time.time()),
             ).fetchone()[0]
             require(active < 32, 429, "Inspection limit reached.")
@@ -538,11 +503,13 @@ class Api:
                 for seed in info.web_seeds():
                     endpoint(seed["url"])
             else:
-                self.e.magnet(owner, ident, b.get("magnet"))
+                self.e.magnet_parameters(b.get("magnet"))
             self.j.db.execute(
-                "INSERT INTO inspections VALUES(?,?,?,?,?)",
-                (ident, owner, raw, b.get("magnet"), int(time.time()) + 900),
+                "INSERT INTO inspections(id,owner,metainfo,magnet,expires,pending) VALUES(?,?,?,?,?,?)",
+                (ident, owner, raw, b.get("magnet"), int(time.time()) + 900, int(raw is None)),
             )
+            if raw is None:
+                self.e.fill_lookup_slots()
             return 201, self.inspection(self.get_inspection(owner, ident))
         if method == "POST" and path == "torrents":
             scope("submit")
@@ -605,6 +572,7 @@ class Api:
             self.revision(row, req)
             require(
                 row["id"] not in self.e.handles
+                and row["id"] not in self.e.delivery.pending
                 and (row["desired"] in ("stopped", "cancelled") or row["completed"]),
                 409,
                 "Stop this job before deleting files.",
@@ -676,7 +644,7 @@ class Api:
 
     def get_inspection(self, owner, ident):
         row = self.j.db.execute(
-            "SELECT * FROM inspections WHERE owner=? AND id=? AND expires>?",
+            "SELECT * FROM inspections WHERE owner=? AND id=? AND (pending=1 OR expires>?)",
             (owner, ident, time.time()),
         ).fetchone()
         require(row, 404, "Inspection expired or missing.")
@@ -1032,24 +1000,42 @@ class Api:
     def manifest(self, row):
         _, files = inspect(row["metainfo"])
         result = []
-        for file in files:
-            path = safe_file(self.j.files_root(row), file["path"])
-            if path.is_file():
-                st = path.stat()
-                require(st.st_nlink == 1, 409, "Shared file cannot be erased.")
-                result.append(
-                    {
-                        "path": file["path"],
-                        "bytes": st.st_size,
-                        "mtime_ns": str(st.st_mtime_ns),
-                        "file_id": str(st.st_ino),
-                    }
-                )
+        roots = [("service", self.j.files_root(row))]
+        delivered = self.e.delivery.status(row).get("saved_to")
+        if delivered:
+            roots.append(("downloads", plain_path(delivered)))
+        for location, root in roots:
+            for file in files:
+                path = safe_file(root, file["path"])
+                if path.is_file():
+                    st = path.stat()
+                    require(st.st_nlink == 1, 409, "Shared file cannot be erased.")
+                    result.append(
+                        {
+                            "path": file["path"], "location": location, "absolute_path": str(path),
+                            "bytes": st.st_size,
+                            "mtime_ns": str(st.st_mtime_ns),
+                            "file_id": str(st.st_ino),
+                        }
+                    )
         return result
+
+    @staticmethod
+    def source(metainfo, original):
+        if original:
+            return {"source_kind": "magnet", "magnet": original}
+        info, _ = inspect(metainfo)
+        return {"source_kind": "metainfo", "magnet": lt.make_magnet_uri(info)}
 
     def detail(self, row, part):
         info, files = inspect(row["metainfo"])
         h = self.e.handles.get(row["id"])
+        if part == "activity":
+            # Source URIs are available only on this explicitly requested,
+            # owner-scoped route. Status snapshots and lists omit private trackers.
+            source = self.source(row["metainfo"], json.loads(row["options"]).get("bootstrap_magnet"))
+            return {**source, "name": info.name(), "phase": self.e.snapshot(row)["phase"],
+                    "files": self.detail(row, "files")["items"], "publication": self.detail(row, "manifest")}
         if part == "files":
             selected = set(json.loads(row["selection"]))
             return {
@@ -1071,10 +1057,14 @@ class Api:
                 "SELECT manifest FROM published WHERE job=?", (row["id"],)
             ).fetchone()
             ready = bool(row["completed"] and published)
+            delivery = self.e.delivery.status(row)
             return {
                 "files": json.loads(published[0]) if ready else [],
-                "verified": ready,
-                "output_root": str(self.j.files_root(row)) if ready else None,
+                "verified": ready and delivery["delivery_state"] in ("saved", "service_store"),
+                "download_verified": ready,
+                "output_root": (delivery.get("saved_to") or str(self.j.files_root(row))) if ready else None,
+                "service_output_root": str(self.j.files_root(row)) if ready else None,
+                **delivery,
             }
         opts = json.loads(row["options"])
         if part == "trackers" and "trackers" in opts:
@@ -1188,7 +1178,13 @@ class Api:
             )
             try:
                 for entry in json.loads(pending["manifest"]):
-                    path = safe_file(self.j.files_root(row), entry["path"])
+                    root = self.j.files_root(row)
+                    if entry.get("location") == "downloads":
+                        delivered = self.e.delivery.status(row).get("saved_to")
+                        require(delivered, 409, "The delivery destination changed after approval.")
+                        root = plain_path(delivered)
+                    path = safe_file(root, entry["path"])
+                    require(entry.get("absolute_path", str(path)) == str(path), 409, "The reviewed path changed.")
                     if not path.exists():
                         continue
                     st = path.stat()
@@ -1202,6 +1198,8 @@ class Api:
                     path.unlink()
                 result["phase"] = "succeeded"
                 self.j.db.execute("DELETE FROM published WHERE job=?", (row["id"],))
+                self.j.db.execute("DELETE FROM deliveries WHERE job=?", (row["id"],))
+                self.j.db.execute("DELETE FROM delivery_locations WHERE job=?", (row["id"],))
                 snap = json.loads(row["snapshot"])
                 snap["verified_bytes"] = 0
                 self.j.db.execute(

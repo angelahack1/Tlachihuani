@@ -14,6 +14,7 @@ internal sealed class TrayMenu : ContextMenuStrip
     private enum Extra { None = 0, TlamatiniLink = 1, ServiceState = 2, Refresh = 4, Start = 8, Stop = 16, Restart = 32 }
     private const Extra Shown = Extra.None;
     private readonly ToolStripMenuItem? state, start, stop, restart;
+    private readonly ToolStripMenuItem startServices, stopServices, exitItem;
 
     internal TrayMenu(Action showPanel, Func<string, Task> run, Action exitTray)
     {
@@ -37,6 +38,8 @@ internal sealed class TrayMenu : ContextMenuStrip
         // not remove the "status" operation or turn off polling.
         ToolStripMenuItem Command(string caption, string operation) =>
             (ToolStripMenuItem)Items.Add(caption, null, (_, _) => _ = run(operation));
+        startServices = Command("Start Services", "start-services");
+        stopServices = Command("Stop Services", "stop-services");
         if (Shown.HasFlag(Extra.Refresh)) Command("Refresh status", "status");
 
         // Start: request SCM start when stopped. Stop: graceful SCM stop when
@@ -47,10 +50,9 @@ internal sealed class TrayMenu : ContextMenuStrip
         if (Shown.HasFlag(Extra.Start)) start = Command("Start", "start");
         if (Shown.HasFlag(Extra.Stop)) stop = Command("Stop", "stop");
         if (Shown.HasFlag(Extra.Restart)) restart = Command("Restart", "restart");
-        UpdateActions(null, busy: false);
-
         if (Items.Count > 1) Items.Add(new ToolStripSeparator());
-        Items.Add("Exit tray (service keeps running)", null, (_, _) => exitTray());
+        exitItem = (ToolStripMenuItem)Items.Add(string.Empty, null, (_, _) => exitTray());
+        UpdateActions(null, ready: false, stopped: false, busy: false);
     }
 
     internal void SetState(string text)
@@ -58,9 +60,12 @@ internal sealed class TrayMenu : ContextMenuStrip
         if (state is not null) state.Text = text;
     }
 
-    internal void UpdateActions(ControlReply? reply, bool busy)
+    internal void UpdateActions(ControlReply? reply, bool ready, bool stopped, bool busy)
     {
         var scm = reply?.Service?.ScmState;
+        startServices.Enabled = !busy && !ready;
+        stopServices.Enabled = !busy && !stopped;
+        exitItem.Text = stopped && !busy ? "Exit tray" : "Exit tray (service keeps running)";
         if (start is not null) start.Enabled = !busy && reply?.Capabilities?.Start == true && scm == "stopped";
         if (stop is not null) stop.Enabled = !busy && reply?.Capabilities?.Stop == true && scm is "running" or "paused";
         if (restart is not null) restart.Enabled = !busy && reply?.Capabilities?.Restart == true && scm == "running";
@@ -75,7 +80,7 @@ internal sealed class TrayMenu : ContextMenuStrip
             if (url is null) return;
             try { Process.Start(new ProcessStartInfo(url.AbsoluteUri) { UseShellExecute = true }); }
             catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-            { MessageBox.Show("Windows could not open the configured Tlamatini link.", "Tlachihuani"); }
+            { ServiceDialogs.Notice(null, "Open Tlamatini", "Windows could not open the configured Tlamatini link."); }
         };
         Items.Add(open);
     }

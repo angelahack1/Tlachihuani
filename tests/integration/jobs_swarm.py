@@ -1,6 +1,7 @@
 """Installed-layout check using a private local tracker and a real libtorrent seed."""
 
 import contextlib
+import csv
 import hashlib
 import hmac
 import http.server as server
@@ -46,6 +47,8 @@ def main(executable, work):
     host_id = uuid.uuid4().hex
     port = free_port()
     service = None
+    denied_root = None
+    sid = None
 
     def launch():
         nonlocal service
@@ -140,17 +143,10 @@ def main(executable, work):
         http(
             "GET", "health", headers={"Origin": "http://untrusted.invalid"}, status=403
         )
-        verifier = secrets.token_urlsafe(32)
-        challenge = http(
-            "POST",
-            "session-challenges",
-            {"verifier_hash": hashlib.sha256(verifier.encode()).hexdigest()},
-            status=201,
-        )
-        exchange = {"challenge_id": challenge["challenge_id"], "verifier": verifier}
-        http("POST", "sessions", exchange, status=409)
-        assert native(op="approve", code=challenge["code"])["body"]["approved"]
-        token = http("POST", "sessions", exchange, status=201)["access_token"]
+        http("POST", "session-challenges", {}, status=401)
+        http("POST", "sessions", {}, status=401)
+        token = native(op="issue", profile="delivery-test-" + host_id, scope="read submit control remove erase",
+                       application_content_root=str(work / "content_generated"))["body"]["access_token"]
         other = native(op="issue", profile="isolated-test-owner", scope="read")["body"][
             "access_token"
         ]
@@ -223,7 +219,7 @@ def main(executable, work):
             flush=True,
         )
         print(
-            "PASS native pairing, token issuance and hostile origin rejection",
+            "PASS native account session, retired public routes and hostile origin rejection",
             flush=True,
         )
         fixture = os.urandom(512 * 1024)
@@ -360,11 +356,23 @@ def main(executable, work):
             hashlib.sha256(fixture).hexdigest(),
             flush=True,
         )
+        def delivered_manifest():
+            result = http("GET", job + "/manifest", token=token)
+            if result.get("delivery_state") == "failed":
+                raise RuntimeError("Delivery failed: " + str(result.get("delivery_error")))
+            return result if result["verified"] else None
+
+        eventually(delivered_manifest)
         manifest = http("GET", job + "/manifest", token=token)
         assert (
             manifest["verified"]
             and manifest["files"][0]["sha256"] == hashlib.sha256(fixture).hexdigest()
         )
+        delivered = Path(manifest["output_root"]) / "fixture.bin"
+        assert manifest["delivery_state"] == "saved" and delivered.read_bytes() == fixture
+        assert manifest["delivery_location"] == "downloads"
+        assert "Torrenter" in delivered.parts and str(work / "state") not in str(delivered)
+        print("PASS real Windows Downloads delivery:", delivered, flush=True)
         action("stop")
         eventually(lambda: get()["phase"] == "stopped")
         move = http(
@@ -383,7 +391,7 @@ def main(executable, work):
             == "succeeded"
         )
         manifest = http("GET", job + "/manifest", token=token)
-        moved = Path(manifest["output_root"]) / "fixture.bin"
+        moved = Path(manifest["service_output_root"]) / "fixture.bin"
         assert (
             not files[0].exists()
             and moved.read_bytes() == fixture
@@ -420,6 +428,7 @@ def main(executable, work):
             == "succeeded"
         )
         assert not files[0].exists()
+        assert not delivered.exists(), "Approved erasure must include the reviewed Downloads copy"
         http(
             "DELETE",
             job,
@@ -441,6 +450,9 @@ def main(executable, work):
         eventually(lambda: magnet_seed.status().is_seeding)
         magnet = lt.make_magnet_uri(magnet_seed)
         metadata = http("POST", "inspections", {"magnet": magnet}, token, status=201)
+        source_path = "inspections/" + metadata["inspection_id"] + "/activity"
+        assert http("GET", source_path, token=token)["magnet"] == magnet
+        http("GET", source_path, token=other, status=404)
 
         def reviewed():
             value = http("GET", "inspections/" + metadata["inspection_id"], token=token)
@@ -449,6 +461,15 @@ def main(executable, work):
         resolved = eventually(reviewed, 60)
         print("PASS magnet metadata resolved from the isolated peer", flush=True)
         assert resolved["files"][0]["path"] == "fixture.bin"
+        # Exercise a real Windows ACL on this run's unique test account leaf.
+        # No permissions on the user's Downloads folder or other jobs change.
+        if os.name == "nt":
+            sid = next(csv.reader([subprocess.check_output(
+                ["whoami.exe", "/user", "/fo", "csv", "/nh"], text=True).strip()]))[1]
+            primary = delivered.parent.parent
+            assert len(primary.name) == 64 and primary.parent.name == "Torrenter" and sid.startswith("S-1-")
+            subprocess.run(["icacls.exe", str(primary), "/deny", "*" + sid + ":(AD)"], check=True)
+            denied_root = primary
         next_job = http(
             "POST",
             "torrents",
@@ -458,14 +479,24 @@ def main(executable, work):
             status=202,
         )
         job = "torrents/" + next_job["job_id"]
+        audit = http("GET", job + "/activity", token=token)
+        assert audit["magnet"] == magnet and audit["source_kind"] == "magnet"
+        assert [f["path"] for f in audit["files"] if f["selected"]] == ["fixture.bin"]
+        http("GET", job + "/activity", token=other, status=404)
         assert any(
             t["host"] == "127.0.0.1"
             for t in http("GET", job + "/trackers", token=token)["items"]
         ), "Magnet discovery lost during handoff"
         eventually(complete, 75)
+        eventually(delivered_manifest)
         result = http("GET", job + "/manifest", token=token)
         retained = Path(result["output_root"]) / "fixture.bin"
         assert retained.read_bytes() == fixture
+        if denied_root:
+            assert result["delivery_location"] == "content_generated" and result["downloads_error"]
+            assert retained.is_relative_to(work / "content_generated" / "Torrenter" / denied_root.name)
+            print("PASS actual Windows access denial; verified fallback:", retained,
+                  "SHA256", hashlib.sha256(retained.read_bytes()).hexdigest(), flush=True)
         action("stop")
         eventually(lambda: get()["phase"] == "stopped")
         http(
@@ -490,7 +521,19 @@ def main(executable, work):
             "PASS magnet resolution from a real peer, second download, removal retains bytes, authenticated SSE",
             flush=True,
         )
+        # Record removal must retain the user's copy. After proving that contract,
+        # clean up only this run's independently checked synthetic fixture.
+        assert retained.parent.name == next_job["job_id"]
+        assert retained.read_bytes() == fixture
+        retained.unlink()
+        for empty in (retained.parent, delivered.parent, retained.parent.parent):
+            with contextlib.suppress(OSError):
+                empty.rmdir()  # Never recurse into a directory in Windows Downloads.
     finally:
+        if denied_root is not None:
+            subprocess.run(["icacls.exe", str(denied_root), "/remove:d", "*" + sid], check=True)
+            with contextlib.suppress(OSError):
+                denied_root.rmdir()
         tracker.shutdown()
         tracker.server_close()
         if service:
@@ -501,5 +544,7 @@ def main(executable, work):
 
 
 if __name__ == "__main__":
-    with tempfile.TemporaryDirectory(prefix="tlachihuani-swarm-") as directory:
+    scratch = Path(__file__).resolve().parents[2] / "artifacts" / "verification"
+    scratch.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=scratch, prefix="swarm-") as directory:
         main(str(Path(sys.argv[1]).resolve()), Path(directory))

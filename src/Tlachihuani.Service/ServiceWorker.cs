@@ -73,7 +73,8 @@ public sealed class ServiceWorker(HealthState health, PipeSettings settings, ILo
                 // Do not log attacker-controlled payloads or flood the journal with rejected connections.
                 logger.LogDebug("Local client ended before a valid exchange: {ErrorType}", ex.GetType().Name);
             }
-            finally { if (pipe.IsConnected) pipe.Disconnect(); }
+            // A broken connection also needs Disconnect before the next accept.
+            finally { pipe.Disconnect(); }
         }
     }
 }

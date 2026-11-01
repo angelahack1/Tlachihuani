@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <!-- SCM and redirected native control never need a console. This also
+         prevents flashes when called from older installed Tlamatini clients. -->
+    <OutputType>WinExe</OutputType>
     <ApplicationIcon>../../assets/branding/XT.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

@@ -7,6 +7,9 @@ using Tlachihuani.Contracts;
 using Tlachihuani.Core;
 using Tlachihuani.Windows;
 
+if (args is ["--tray-layout", var directory, var mode]) return TrayLayoutChecks.Run(directory, mode);
+if (args is ["--downloads-access"]) return DownloadAccessChecks.Run();
+
 var passed = 0;
 async Task Check(string name, Func<Task> body) { await body(); Console.WriteLine($"PASS {name}"); passed++; }
 void Require(bool value, string message) { if (!value) throw new InvalidOperationException(message); }
@@ -15,6 +18,26 @@ Request RequestFor(string operation) => new(1, 0, Guid.NewGuid(), operation);
 
 try
 {
+    await Check("XT exit label follows service state and keeps the exit action", () =>
+    {
+        int exits = 0;
+        using var menu = new Tlachihuani.Tray.TrayMenu(() => { }, _ => Task.CompletedTask, () => exits++);
+        var exit = menu.Items[menu.Items.Count - 1];
+        const string warning = "Exit tray (service keeps running)";
+        Require(exit.Text == warning, "Unobserved services must retain the warning");
+        foreach (var (ready, stopped, busy, label) in new[]
+        {
+            (false, true, false, "Exit tray"), (false, true, true, warning),
+            (false, false, false, warning), (true, false, false, warning), (false, true, false, "Exit tray")
+        })
+        {
+            menu.UpdateActions(null, ready, stopped, busy);
+            Require(exit.Text == label, $"Unexpected exit label: {exit.Text}");
+        }
+        exit.PerformClick();
+        Require(exits == 1, "Exit command lost its handler");
+        return Task.CompletedTask;
+    });
     await Check("Oversized and zero-length frames are rejected before allocation", async () =>
     {
         foreach (var size in new[] { 0, 65537, int.MaxValue, -1 })
@@ -110,6 +133,11 @@ try
                 var client = new Controller(new(id, host.Id, info.FileName));
                 var first = await client.ExecuteAsync("status");
                 Require(first.Ok && first.Service?.Health == "healthy", "Real host failed: " + first.Error);
+                // A client may exit during a status request (including when it cannot verify
+                // the server). Breaking one pipe must leave this same host serving other clients.
+                using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+                using (var abandoned = await LocalPipe.ConnectAsync(Installation.DevelopmentPipe(id), deadline.Token))
+                    await abandoned.WriteAsync(new byte[] { 4, 0, 0, 0, 123 }, deadline.Token);
                 var batch = await Task.WhenAll(Enumerable.Range(0, 32).Select(_ => client.ExecuteAsync("status")));
                 Require(batch.All(reply => reply.Ok), "Concurrent clients failed: " + string.Join("; ", batch.Where(reply => !reply.Ok).Select(reply => reply.Error)));
                 await Task.Delay(2200);

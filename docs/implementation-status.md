@@ -2,6 +2,10 @@
 
 On ANGYSLAP, Jobs was installed and upgraded under its virtual service account. The delegated operator verified the named pipe and restarted Jobs from standard Windows PowerShell, while the original Tlachihuani service stayed stopped. The installed XT panel approved an actual headed Chrome session on port 12064. A private swarm exercised transfer, publication, recovery, isolation and deletion. See [the operating guide and verification scope](torrenter.md).
 
+The installed XT menu was exercised on ANGYSLAP with both services set to Manual. **Start Services** brought up both hosts and the REST endpoint. Tlamatini's enrolled Torrenter agent listed the completed download. The original icon appeared in color when the API was ready and turned gray when the provider was disabled. **Start Services** also recovered that partially running configuration.
+
+After **Stop Services**, both SCM PIDs were zero, the captured service and child processes had exited, port 12064 had no listener, and the same XT process displayed the gray icon. An isolated Jobs host also shut down with its torrent worker deliberately suspended. A local-pipe regression check disconnects a client mid-request and verifies that the primary host keeps serving other clients.
+
 The following entries are the historical October 11 foundation record.
 
 ## Lifecycle foundation — 2026-10-11

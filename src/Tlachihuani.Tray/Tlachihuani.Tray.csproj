@@ -2,10 +2,12 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationIcon>../../assets/branding/XT.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Tlachihuani.Client/Tlachihuani.Client.csproj" />
     <EmbeddedResource Include="../../assets/branding/XT.ico" LogicalName="Tlachihuani.XT.ico" />
+    <InternalsVisibleTo Include="Tlachihuani.Checks" />
   </ItemGroup>
 </Project>

@@ -109,7 +109,7 @@ internal sealed class TorrenterProvider(JobsSettings settings, ILogger log) : IJ
                     catch (IOException) { reply["engine"] = false; }
                 }
             }
-            else if (op is "approve" or "issue" or "approve-delete" or "pending-deletions" or "deletion-details" or "revoke")
+            else if (op is "issue" or "approve-delete" or "pending-deletions" or "deletion-details" or "revoke")
             {
                 req["admin"] = true; req["owner"] = sid;
                 reply = await worker.Request(req, token);

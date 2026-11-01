@@ -1,7 +1,8 @@
 param(
     [string]$BrowserPython,
     [switch]$Installed,
-    [int]$TrayProcessId
+    [string]$Username,
+    [string]$Controller = "http://127.0.0.1:8000"
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\Assert-Visible.ps1"
@@ -12,17 +13,14 @@ try {
     if ($Installed) {
         if (!$BrowserPython) { throw 'Installed browser acceptance requires -BrowserPython.' }
         $image = Join-Path $env:ProgramFiles 'XAIHT\Tlachihuani\Jobs\Tlachihuani.Jobs.exe'
-        $switches = @('--installed')
-        if ($TrayProcessId) {
-            $actual = Get-Process -Id $TrayProcessId
-            $expected = Join-Path $env:ProgramFiles 'XAIHT\Tlachihuani\Tray\Tlachihuani.Tray.exe'
-            if ($actual.Path -ne $expected -or $actual.SessionId -ne (Get-Process -Id $PID).SessionId) { throw 'Unexpected tray identity.' }
-            $switches += @('--tray-pid',[string]$TrayProcessId)
-        }
+        if (!$Username) { throw 'Supply a signed-in development account with -Username.' }
+        $switches = @('--installed','--controller',$Controller,'--username',$Username)
     } else {
         $image = '.\artifacts\publish\Jobs\Tlachihuani.Jobs.exe'
         $runtime = '.\artifacts\publish\Jobs\runtime\python.exe'
         if (!(Test-Path -LiteralPath $runtime)) { throw 'Publish Jobs and its private runtime first.' }
+        & $runtime -I -B -u '.\tests\integration\test_magnet_queue.py'
+        if ($LASTEXITCODE) { throw "Magnet queue and recovery check failed ($LASTEXITCODE)." }
         & $runtime -B -u '.\tests\integration\jobs_swarm.py' $image
         if ($LASTEXITCODE) { throw "Private swarm check failed ($LASTEXITCODE)." }
         $switches = @()

@@ -4,10 +4,10 @@ Torrenter downloads selected files in the independent Windows service `Tlachihua
 
 ## Open the workspace
 
-1. Right-click the **XT** icon and choose **Show panel → Services…**. The Services window shows Jobs, engine and web readiness, the active transfer count and the number of job records.
-2. Choose **Open workspace**, then **Request pairing code**. Type the eight digits into **Services → Approve code**. Leave **Account** blank for your Windows profile. Enter the enrolled application account to share that account’s job IDs with an API client.
+1. Right-click **XT → Start Services**. When XT turns color, the Torrenter API is ready. **Show panel → Services…** shows Jobs, engine and web readiness, the active transfer count and the number of job records. Choose **XT → Stop Services** to stop the entire Tlachihuani stack and leave the gray tray icon running.
+2. Choose **Open workspace** in XT or **Panels → Torrenter Workspace** in Tlamatini. Sign in to Tlamatini once. When both editions are available, XT lets you choose the account to view. Reloading keeps that session.
 3. Choose **Add torrent**, upload a `.torrent` or enter a magnet, then **Inspect metadata**. Choose files, priorities, destination, resume and seeding policy. **Download selected files** creates the durable job.
-4. Filter by tracker, category, tag, observed state or activity. **Preferences** saves the column order, widths, sorting and grid height for the paired account in this browser. Use the transfer’s **Verified output** tab to see its output directory and per-file SHA-256. **Stop** retains partial files until you choose **Start**. **Pause** pairs with **Resume**. **Cancel** ends the transfer permanently. **Remove record** retains files. **Erase files…** requires a separate exact-file review and approval in XT.
+4. Filter by tracker, category, tag, observed state or activity. **Preferences** saves the column order, widths, sorting and grid height for the signed-in account in this browser. Use the transfer’s **Verified output** tab to see its output directory and per-file SHA-256. **Stop** retains partial files until you choose **Start**. **Pause** pairs with **Resume**. **Cancel** ends the transfer permanently. **Remove record** retains files. **Erase files…** requires a separate exact-file review and approval in XT.
 
 **Restart web** restarts the HTTP process independently of active peers. **Stop provider** drains Torrenter and persists the stop across Jobs restarts. **Stop Jobs** stops the entire provider host. Use **Start Jobs** and, if explicitly stopped, **Start provider** to bring it back.
 
@@ -37,7 +37,7 @@ Run the tray and these status checks as the delegated operator in an ordinary Po
 $base = Join-Path $env:ProgramFiles 'XAIHT\Tlachihuani'
 Start-Process -FilePath (Join-Path $base 'Tray\Tlachihuani.Tray.exe') -ArgumentList '--show'
 Get-Service Tlachihuani,Tlachihuani.Jobs
-'{"op":"catalog"}' | & (Join-Path $base 'Jobs\Tlachihuani.Jobs.exe') --control
+'{"op":"catalog"}' | & (Join-Path $base 'Jobs\Tlachihuani.Jobs.exe') --control | ConvertFrom-Json
 Invoke-RestMethod 'http://127.0.0.1:12064/api/v1/health'
 ```
 
@@ -50,7 +50,7 @@ Use the API prefix `/api/v1`. For automation, select **Issue API credential** in
 | Intent | Request | Result |
 |---|---|---|
 | Discover | GET `/`, `/health`, authenticated `/capabilities` | Protocol, engine readiness, scopes, approved roots and verbs |
-| Inspect | POST `/inspections` with multipart field `file` or JSON `{"magnet":"magnet:…"}`. GET `/inspections/{id}` | Review stable file IDs and sizes. Magnet metadata can take time |
+| Inspect | POST `/inspections` with multipart field `file` or JSON `{"magnet":"magnet:…"}`. GET `/inspections/{id}` | HTTP 201 admits the magnet even when all four metadata slots are busy. Poll the same inspection ID; submit files only after `phase: ready`. |
 | Submit | POST `/torrents` with `inspection_id`, `metadata_revision`, `selected_file_ids`, optional `priorities` keyed by file ID, and `destination_root_id` | HTTP 202 returns job ID, revision and durable operation ID |
 | Observe | GET `/torrents?limit=100&cursor=0`, `/torrents/{id}`, `/operations/{id}` | Queue, desired and observed state, selected/verified bytes and saved outcome. List queries accept search, phase, desired, category, tag, tracker, sort and direction |
 | Inspect a transfer | GET `/torrents/{id}/{files,trackers,peers,web-seeds,statistics,manifest}` | File selection, redacted source hosts, live peer information or verified publication |
@@ -68,14 +68,69 @@ Trusted application enrollment uses native `{"op":"issue","gateway":true,"profil
 
 ## Ownership and recovery
 
+### Windows Downloads publication (1 November 2026)
+
+The local controller prepares the operator's real Windows Downloads known folder
+before issuing an account credential. It creates only a dedicated
+`Torrenter/<account profile>` directory and grants the Jobs service Modify there.
+The identification-only pipe is unchanged: the service validates the authenticated
+caller's ownership and account folder name. The controller checks for reparse
+points while preparing the folder. The service opens the account directory and
+checks its final Windows path; it needs no permission to list the parent
+`Downloads\Torrenter` or the rest of the user's Downloads. The worker checks the
+destination again before copying. The private journal and service working
+directories remain protected.
+
+Jobs automatically copies each completed, hash-verified selection into that folder,
+under its job ID, and publishes each file atomically. The service retains its
+working copy; closing either Tlamatini or the browser does not interrupt delivery.
+Previously completed jobs are backfilled after that account connects. Existing
+files with different content are preserved and reported as a delivery failure.
+Successful delivery is persisted across service restarts. A user-modified or
+removed delivered file is reported, rather than silently recreated on every poll.
+
+Status includes `delivery_state`, `saved_to` and `delivery_error`. A registered
+account's manifest distinguishes `download_verified` from the delivered
+`verified` result. `output_root` points to the accessible delivered directory;
+`service_output_root` identifies the durable working copy. Removing a record keeps
+both copies. Exact-file erasure previews include both locations and still require
+the existing native approval. An older isolated development fixture without a
+registered delivery root retains the explicit `service_store` result.
+
+The browser uses the full viewport, anchors its footer at the bottom and allocates
+remaining space to the transfer list. The selected detail pane has a configurable
+share; obsolete fixed grid heights are migrated while columns and sorting remain.
+
+Repeat the filesystem checks with `python tests/integration/test_delivery.py` and
+the real tracker/peer suite with `tests/integration/jobs_swarm.py` from a verified
+visible foreground console. These tests include Windows Downloads delivery,
+restart recovery, account isolation, record retention and reviewed file erasure.
+
+For an existing installation, an administrator runs
+`packaging\windows\Update-Jobs.ps1` from a visible foreground PowerShell console.
+Success prints the registered program directory, an update ID and the SHA-256 of
+the installed Downloads worker. An operator can run the same script with
+`-VerifyOnly` to compare the installed host and worker files with the published
+payload without stopping a service or changing anything. This verifies program
+files; delivery of a book still requires its account's saved manifest and readable
+bytes under the Windows Downloads folder.
+
+For an existing queue, run `tests/desktop/torrenter_workspace.py` from a visible
+console with the installed Jobs executable, `--installed`, the edition's loopback
+`--controller` URL, `--username` and `--verify-completed COUNT`. Headed Chrome
+signs in, reads that account's manifests, and verifies the length and SHA-256 of
+every file in those completed jobs against the operator's Windows Downloads folder.
+This mode does not add jobs, change preferences or remove files.
+
 * `src/Tlachihuani.Jobs/` registers each approved provider adapter in the host. Torrenter supervises a private libtorrent worker and a Kestrel child carrying the browser assets. Windows Job Objects bind the children to their owner. Web process exit leaves the engine running.
 * `workers/torrent/` owns a single-writer SQLite WAL journal, inspections, durable receipts, per-owner engine sessions, checkpoints and verification. Moving files uses a journaled intent and a same-volume rename. Erasure replays only approved file identities. The host process and the web facade access the journal through the worker.
 * The installation identity is in `%ProgramData%\XAIHT\Tlachihuani.Jobs\installation.json`. The protected `state` directory contains the journal and owned files. The native Windows operator has read access to their own output subtree. Agent profile outputs are isolated. The manifest exposes verified paths to the authorized profile.
 * Both storage roots reside on the service volume. Admission caps each torrent at 50 GiB and 4,096 files, reserves outstanding selected bytes and leaves 64 MiB free. Up to two transfers per owner and four per host are active at once. Public and private torrents have different discovery policies. Seeding is opt-in, rate-capped and bounded by time or upload ratio.
+* Metadata discovery has its own four slots. Additional magnets wait in a durable first-in, first-out queue. During `resolving_metadata`, `lookup_state` is either `queued` (no peer timer running) or `active` (up to 180 seconds to obtain metadata). The authenticated inspection activity shows known and connected peer counts while active. An expired lookup can be retried with a new inspection. The separate limit of 32 retained inspections per account still applies.
 * The worker package carries hash-verified CPython 3.12.10 and libtorrent 2.1.1. The release uses the private runtime under `Jobs\runtime`. Building and testing it does not install Python packages into Tlamatini.
 
 ## Repeat the checks
 
-Use `.\scripts\Test-Jobs.ps1` after publishing for a private tracker, seed, isolated Jobs host and independent content verification. Supply `-BrowserPython <path-to-python.exe>` for the headed Chrome exercise with Playwright. For installed browser acceptance, use `-Installed -BrowserPython <path>`; add `-TrayProcessId <installed-XT-PID>` to exercise the real native approval dialog with pywin32. The installed browser test uses a small unique, private fixture and removes its job record. Keep the visible foreground development console open for inspection.
+Use `.\scripts\Test-Jobs.ps1` after publishing to check transfers from a private seed, magnet resolution and independent content verification. To exercise the installed service in headed Chrome, supply `-Installed -BrowserPython <path> -Username <test-account> -Controller http://127.0.0.1:8000`. The test signs in to Tlamatini, reloads its workspace, submits a unique fixture and removes its record. Keep the foreground development console open for inspection.
 
 The 31 October installed checks covered virtual-account service startup, delegated SCM stop/start, persisted provider stop, native identity verification, XT code approval and the browser admission/stop/remove workflow. Isolated checks also covered file and magnet admission, real 524,288-byte peer transfers with independently matched SHA-256, record removal with the bytes retained, authenticated SSE, hash publication, abrupt host recovery, cross-owner isolation, assertion replay, source path rejection, root relocation and explicit file-erasure approval. Full power-cycle, sign-out, Explorer restart, multi-day transfers, release signing and production packaging remain separate acceptance work.

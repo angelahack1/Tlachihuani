@@ -4,6 +4,9 @@ using Microsoft.Extensions.Hosting.WindowsServices;
 using Tlachihuani.Windows;
 using Tlachihuani.Jobs;
 
+if (args.FirstOrDefault() == "--console" && OperatingSystem.IsWindows())
+    DevelopmentConsole.AttachParent();
+
 if (args is ["--web", var portText] && int.TryParse(portText, out int httpPort))
 {
     if (await Console.In.ReadLineAsync() != "START") return 2;
@@ -63,5 +66,12 @@ return 0;
 
 namespace Tlachihuani.Jobs
 {
+    internal static class DevelopmentConsole
+    {
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+        private static extern bool AttachConsole(uint processId);
+        internal static void AttachParent() => AttachConsole(uint.MaxValue);
+    }
+
     internal sealed record JobsSettings(string Pipe, string Operator, string State, int Port, bool Development);
 }

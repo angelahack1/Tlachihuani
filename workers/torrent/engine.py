@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 import libtorrent as lt
 
 from storage import Problem, packed, require, safe_file
+from delivery import Delivery
 
 
 def inspect(raw):
@@ -141,6 +142,7 @@ class Engine:
         self.sessions = {}
         self.handles = {}
         self.lookups = {}
+        self.timed_out_owners = set()
         self.last_checkpoint = 0
         self.last_cleanup = 0
         self.pending_release = {}
@@ -150,6 +152,7 @@ class Engine:
         )
         self.publications = {}
         self.closing = threading.Event()
+        self.delivery = Delivery(journal, self.publisher, self.closing)
 
     def verify_files(self, root, metainfo, selected):
         _, files = inspect(metainfo)
@@ -227,13 +230,13 @@ class Engine:
         self.sessions[owner] = session
         return session
 
-    def magnet(self, owner, ident, uri):
+    @staticmethod
+    def magnet_parameters(uri):
         require(
             isinstance(uri, str) and uri.startswith("magnet:?") and len(uri) <= 8192,
             422,
             "Expected a bounded magnet URI.",
         )
-        require(len(self.lookups) < 4, 429, "Metadata inspection capacity reached.")
         try:
             params = lt.parse_magnet_uri(uri)
         except RuntimeError:
@@ -247,6 +250,10 @@ class Engine:
                 422,
                 "Invalid magnet web seed.",
             )
+        return params
+
+    def start_lookup(self, owner, ident, uri):
+        params = self.magnet_parameters(uri)
         params.save_path = str(self.j.root / "inspections" / ident)
         params.flags |= (
             lt.torrent_flags.upload_mode
@@ -257,8 +264,46 @@ class Engine:
         self.lookups[ident] = (
             owner,
             self.session(owner).add_torrent(params),
-            time.time() + 180,
+            time.monotonic() + 180,
         )
+
+    def fill_lookup_slots(self):
+        """The four oldest pending admissions own the four metadata slots."""
+        if len(self.lookups) >= 4:
+            return
+        rows = self.j.db.execute(
+            "SELECT id,owner,magnet FROM inspections WHERE pending=1 ORDER BY rowid LIMIT 4"
+        ).fetchall()
+        for row in rows:
+            if row["id"] in self.lookups:
+                continue
+            try:
+                self.start_lookup(row["owner"], row["id"], row["magnet"])
+            except (Problem, RuntimeError, ValueError):
+                # A rejected handle must never block later magnets in the queue.
+                self.finish_lookup(row["id"], None)
+
+    def finish_lookup(self, ident, metainfo):
+        self.j.db.execute(
+            "UPDATE inspections SET pending=0,metainfo=?,expires=? WHERE id=?",
+            (metainfo, int(time.time()) + 900, ident),
+        )
+
+    def retire_timed_out_sessions(self):
+        # libtorrent keeps peer failures and backoff in its session. A timed-out
+        # account must get a fresh discovery session on its next attempt, but
+        # never tear down a session that still owns a live transfer or lookup.
+        if not self.timed_out_owners:
+            return
+        busy = {owner for owner, _, _ in self.lookups.values()}
+        if self.handles:
+            slots = ",".join("?" for _ in self.handles)
+            busy.update(row["owner"] for row in self.j.db.execute(
+                f"SELECT DISTINCT owner FROM jobs WHERE id IN ({slots})", tuple(self.handles)
+            ))
+        for owner in self.timed_out_owners - busy:
+            self.sessions.pop(owner, None)
+            self.timed_out_owners.discard(owner)
 
     def open(self, row):
         info, files = inspect(row["metainfo"])
@@ -405,6 +450,7 @@ class Engine:
         for private_setting in ("trackers", "web_seeds", "bootstrap_magnet"):
             result.pop(private_setting, None)
         result["destination_root_id"] = row["root_id"]
+        result.update(self.delivery.status(row))
         if row["id"] in self.failures:
             result["error"] = self.failures[row["id"]]
         return result
@@ -413,9 +459,15 @@ class Engine:
         now = time.time()
         self.alerts()
         for ident, (owner, h, expires) in list(self.lookups.items()):
-            if h.status().has_metadata or now > expires:
+            has_metadata = h.status().has_metadata
+            if has_metadata or time.monotonic() >= expires:
+                if has_metadata:
+                    self.timed_out_owners.discard(owner)
+                else:
+                    self.timed_out_owners.add(owner)
+                reviewed = None
                 try:
-                    if h.status().has_metadata:
+                    if has_metadata:
                         # Peers send the info dictionary only. The reviewed admission must
                         # carry its approved discovery hints into the fresh download handle.
                         uri = self.j.db.execute(
@@ -436,17 +488,19 @@ class Engine:
                             creator.add_http_seed(url)
                         raw = bytes(lt.bencode(creator.generate()))
                         inspect(raw)
-                        self.j.db.execute(
-                            "UPDATE inspections SET metainfo=? WHERE id=?", (raw, ident)
-                        )
+                        reviewed = raw
                 except (Problem, RuntimeError, ValueError, KeyError):
                     pass  # Invalid remote metadata expires this inspection; other jobs continue.
                 finally:
+                    self.finish_lookup(ident, reviewed)
                     self.sessions[owner].remove_torrent(h)
                     del self.lookups[ident]
+        self.retire_timed_out_sessions()
+        self.fill_lookup_slots()
         rows = self.j.db.execute(
             "SELECT * FROM jobs WHERE removed=0 ORDER BY coalesce(json_extract(options,'$.queue_position'),0),created,id"
         ).fetchall()
+        self.delivery.tick(rows)
         for row in rows:
             ident = row["id"]
             h = self.handles.get(ident)
@@ -536,7 +590,7 @@ class Engine:
         if now - self.last_checkpoint >= 30:
             self.last_checkpoint = now
         if now - self.last_cleanup >= 60:
-            self.j.db.execute("DELETE FROM inspections WHERE expires<?", (int(now),))
+            self.j.db.execute("DELETE FROM inspections WHERE pending=0 AND expires<?", (int(now),))
             self.j.db.execute("DELETE FROM tokens WHERE expires<?", (int(now),))
             self.j.db.execute("DELETE FROM previews WHERE expires<?", (int(now),))
             self.j.db.execute("DELETE FROM nonces WHERE expires<?", (int(now),))

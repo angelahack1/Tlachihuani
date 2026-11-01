@@ -4,8 +4,8 @@ Work in `C:\Development\XAIHT\Tlachihuani`. The separate Tlamatini reference che
 
 ## Installed now
 
-* On ANGYSLAP the independent `Tlachihuani.Jobs` service is registered for delayed automatic startup under its own virtual account. The delegated operator is `ANGYSLAP\angel`. XT → Show panel → Services… manages Torrenter and opens its loopback workspace on port 12064. Jobs has a separate manifest from the original service.
-* The solution carries the original SCM service, native controls and tray, plus the Jobs host, its enrolled providers, web assets and private torrent runtime. The tray context menu still has two entries. The optional historical commands are preserved in `src/Tlachihuani.Tray/TrayMenu.cs`.
+* On ANGYSLAP both services are set to Manual. The delegated operator is `ANGYSLAP\angel`. XT starts independently at user sign-in. **Start Services** brings up the services and Torrenter on port 12064. **Stop Services** leaves only XT running. Jobs has a separate manifest from the original service.
+* XT is gray until both services are running and Torrenter's API responds. The context menu also offers **Show panel** and **Exit tray**. The exit label reads **Exit tray (service keeps running)** until XT confirms both services are stopped or absent and any pending change finishes. The optional historical commands are preserved in `src/Tlachihuani.Tray/TrayMenu.cs`.
 * `scripts/Build.ps1 -Mode Check` covers the original lifecycle. Publish, then run `scripts/Test-Jobs.ps1` for a real private swarm and crash/recovery checks. Supply a Playwright-capable Python and an installed Chrome for the explicitly headed workflow. Follow [the visible-execution policy](docs/development-execution.md).
 * The installed XT/Chrome run on 31 October exercised the native code approval, upload, all detail tabs, stop, filter and record removal. The delegated account exercised actual SCM stop and start. The original Tlachihuani registration remained stopped. Installation and update retained the independent Jobs identity.
 

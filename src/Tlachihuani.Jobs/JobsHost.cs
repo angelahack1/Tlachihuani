@@ -44,8 +44,38 @@ internal sealed class JobsHost(JobsSettings settings, ILogger<JobsHost> log) : B
             {
                 var req = await Protocol.ReadAsync<JsonObject>(pipe, deadline.Token);
                 string? sid = null;
-                pipe.RunAsClient(() => sid = WindowsIdentity.GetCurrent(true)?.User?.Value);
+                string? proposedRoot = (string?)req["delivery_root"];
+                string? proposedFallback = (string?)req["fallback_root"];
+                bool requestedFallback = proposedFallback is not null || req.ContainsKey("fallback_error");
+                req.Remove("fallback_root");
+                req.Remove("fallback_error");
+                req.Remove("delivery_root");
+                req.Remove("delivery_error");
+                pipe.RunAsClient(() =>
+                {
+                    using var client = WindowsIdentity.GetCurrent(true);
+                    sid = client?.User?.Value;
+                });
                 if (sid is null) throw new UnauthorizedAccessException();
+                if ((string?)req["op"] == "issue")
+                {
+                    try
+                    {
+                        req["delivery_root"] = DownloadDelivery.Validate(proposedRoot, sid, (string?)req["profile"] ?? "");
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+                    {
+                        // Authentication remains usable to diagnose/retry a disconnected or
+                        // read-only Downloads folder. Never report delivery as successful.
+                        req["delivery_error"] = "Cannot prepare Windows Downloads: " + ex.Message;
+                    }
+                    if (requestedFallback)
+                    {
+                        try { req["fallback_root"] = DownloadDelivery.Validate(proposedFallback, sid, (string?)req["profile"] ?? "", fallback: true); }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException)
+                        { req["fallback_error"] = "Cannot prepare content_generated: " + ex.Message; }
+                    }
+                }
                 JsonObject reply;
                 if ((string?)req["op"] == "catalog")
                 {
@@ -65,7 +95,7 @@ internal sealed class JobsHost(JobsSettings settings, ILogger<JobsHost> log) : B
             {
                 log.LogDebug("Native request ended: {Type}", ex.GetType().Name);
             }
-            finally { if (pipe.IsConnected) pipe.Disconnect(); }
+            finally { pipe.Disconnect(); }
         }
     }
 }

@@ -3,13 +3,13 @@ using System.Runtime.InteropServices;
 using System.Security.AccessControl;
 using System.Security.Principal;
 
-namespace Tlachihuani.Jobs;
+namespace Tlachihuani.Windows;
 
-internal static class OperatorProcessAccess
+public static class OperatorProcessAccess
 {
     // The native client holds a real process handle and verifies the executable before
     // sending a request. A virtual account's default process ACL denies that query.
-    internal static void AllowIdentityCheck(string operatorSid)
+    public static void AllowIdentityCheck(string operatorSid)
     {
         const int daclInformation = 4;
         const int insufficientBuffer = 122;

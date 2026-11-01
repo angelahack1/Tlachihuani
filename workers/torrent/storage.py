@@ -83,6 +83,15 @@ class Journal:
           CREATE INDEX IF NOT EXISTS owner_events ON events(owner,cursor);
         """)
         # Upgrade earlier databases without invalidating existing receipts or granting extra scopes.
+        if "pending" not in {r[1] for r in self.db.execute("PRAGMA table_info(inspections)")}:
+            self.db.execute("ALTER TABLE inspections ADD COLUMN pending INTEGER NOT NULL DEFAULT 0")
+            # Older workers kept active handles in memory only. Give still-valid
+            # unfinished magnets a chance to resolve when upgrading that database.
+            self.db.execute(
+                "UPDATE inspections SET pending=1 WHERE magnet IS NOT NULL "
+                "AND metainfo IS NULL AND expires>?", (time.time(),)
+            )
+        self.db.execute("CREATE INDEX IF NOT EXISTS inspection_pending ON inspections(pending) WHERE pending=1")
         if "scope" not in {
             r[1] for r in self.db.execute("PRAGMA table_info(gateways)")
         }:
@@ -112,9 +121,15 @@ class Journal:
         self.db.execute(
             "CREATE TABLE IF NOT EXISTS labels(owner TEXT, kind TEXT, name TEXT, PRIMARY KEY(owner,kind,name))"
         )
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS delivery_roots(owner TEXT PRIMARY KEY,path TEXT,error TEXT)"
+        )
+        self.db.execute("CREATE TABLE IF NOT EXISTS fallback_roots(owner TEXT PRIMARY KEY,path TEXT,error TEXT)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS delivery_locations(job TEXT PRIMARY KEY,kind TEXT,primary_error TEXT)")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS deliveries(job TEXT PRIMARY KEY,revision INTEGER,path TEXT,files TEXT,error TEXT)"
+        )
         self.db.commit()
-        self.challenges = {}
-        self.last_pair = {}
 
     def event(self, owner, job, kind):
         self.db.execute(
