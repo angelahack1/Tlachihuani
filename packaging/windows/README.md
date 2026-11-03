@@ -1,5 +1,7 @@
 # Windows packaging foundation
 
+For a new graphical installation use the [Windows setup wizards](../setup/README.md). The scripts below maintain script-managed installations and use different ownership records.
+
 Run `scripts/Build.ps1 -Mode Publish` from a verified visible foreground PowerShell console. Published binaries are framework-dependent Windows x64 builds and require the .NET 10 Desktop Runtime. They are not signed release artifacts.
 
 **Independent Jobs workload.** See [the Torrenter operating guide](../../docs/torrenter.md) for first installation, update, runtime requirements, delegated controls and verification. `Install-Jobs.ps1`, `Update-Jobs.ps1` and `Unregister-Jobs.ps1` target the separate Jobs registration. The remaining instructions describe the original service packaging. Agree on a test target/operator, then review these scripts before running them in one visible elevated console. Leave the console open afterward. None launches hidden development commands or automatically elevates.

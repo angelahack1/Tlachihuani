@@ -1,4 +1,10 @@
-# Jobs and Torrenter — 2026-10-31
+# Windows setup — 2026-11-03
+
+The versioned setup output under `artifacts/setup/<version>/windows-x64/` contains the graphical installer and matching uninstaller. Workstation UI automation has exercised both version labels, Review and Cancel. Visible isolated acceptance installed the QA package, started both SCM services, removed it, reinstalled it with the same protected Jobs identity and removed it again. The test uses inert service binaries and separate product and service IDs. Full production-payload acceptance requires a clean machine or Windows Sandbox. Build, maintenance and test commands are in the [Windows setup guide](../packaging/setup/README.md).
+
+On 3 November the operator also completed installation of the production 0.1.0 package on the workstation after preserving the legacy folders. Launching the tray executable with `--show` opened the panel. **Start Services** changed XT from gray to green, the Jobs health endpoint returned `engine: ready`, and the workspace displayed the signed-in Tlamatini account. This was a manual workstation check. See [v0.2.0](releases/v0.2.0.md) for the release scope.
+
+## Jobs and Torrenter — 2026-10-31
 
 On ANGYSLAP, Jobs was installed and upgraded under its virtual service account. The delegated operator verified the named pipe and restarted Jobs from standard Windows PowerShell, while the original Tlachihuani service stayed stopped. The installed XT panel approved an actual headed Chrome session on port 12064. A private swarm exercised transfer, publication, recovery, isolation and deletion. See [the operating guide and verification scope](torrenter.md).
 

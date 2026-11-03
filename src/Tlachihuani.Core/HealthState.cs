@@ -6,6 +6,7 @@ namespace Tlachihuani.Core;
 
 public sealed class HealthState
 {
+    private static readonly string ProductVersion = typeof(HealthState).Assembly.GetName().Version!.ToString(3);
     private readonly object gate = new();
     private readonly Queue<ServiceEvent> events = new();
     private readonly Stopwatch uptime = Stopwatch.StartNew();
@@ -50,7 +51,7 @@ public sealed class HealthState
         Protocol.Validate(request);
         lock (gate)
         {
-            var snapshot = new HealthSnapshot(instanceId, Environment.ProcessId, "0.1.0", health,
+            var snapshot = new HealthSnapshot(instanceId, Environment.ProcessId, ProductVersion, health,
                 started, heartbeat, Math.Round(uptime.Elapsed.TotalSeconds, 2), heartbeatSequence);
             var selected = request.Operation == "events"
                 ? events.Where(e => e.Sequence > request.Cursor).Take(request.Limit).ToArray() : null;

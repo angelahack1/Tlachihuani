@@ -15,6 +15,8 @@ Open the [workspace](http://127.0.0.1:12064/) or [API discovery](http://127.0.0.
 
 ## Windows installation
 
+For a new graphical installation, follow the [installer and uninstaller guide](../packaging/setup/README.md). It installs both the primary service and Jobs. The following PowerShell instructions apply to script-managed deployments.
+
 Use a verified visible foreground PowerShell console in the source checkout. Windows x64 requires the .NET 10 ASP.NET Core and Desktop shared runtimes. The pinned .NET SDK supplies both on the development machine.
 
 ```powershell

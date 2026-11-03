@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="docs/releases/v0.2.0.md">v0.2.0 release notes</a> ·
   <a href="#first-download">First download</a> ·
   <a href="#tray-controls">Tray controls</a> ·
   <a href="#installation">Installation</a> ·
@@ -27,6 +28,8 @@
 
 > [!TIP]
 > **Already installed?** Right-click **XT → Start Services**. When the icon turns color, open **Panels → Torrenter Workspace** in Tlamatini to see the downloads for your signed-in account.
+
+If XT is missing after setup, open **Tlachihuani XT** from Start or press **Win+R** and run `"C:\Program Files\XAIHT\Tlachihuani\Tray\Tlachihuani.Tray.exe" --show`. The overview can show **Stopped** on first launch. Right-click the gray XT icon beside the clock (check the hidden icons), then choose **Start Services**. The [local health endpoint](http://127.0.0.1:12064/api/v1/health) should return `{"api_version":1,"engine":"ready"}`.
 
 ## First download
 
@@ -51,11 +54,21 @@
 
 Use **Windows x64** with the **.NET 10 Desktop** and **ASP.NET Core 10** shared runtimes. Windows runs two independent services. `Tlachihuani` reports lifecycle and health. `Tlachihuani.Jobs` hosts Torrenter. The XT tray runs in the signed-in Windows session.
 
-| Step | Guide |
-| :--- | :--- |
-| 1 · Install the primary service, controller and XT tray for your Windows operator | [Windows packaging and permissions](packaging/windows/README.md) |
-| 2 · Register Jobs on first installation, or update an existing installation | [Torrenter installation and update](docs/torrenter.md#windows-installation) |
-| 3 · Show XT at sign-in | Run `packaging\windows\Set-TrayStartup.ps1` as the intended Windows user. This registers the tray for the next sign-in independently of service startup. |
+### Install with the Windows wizard
+
+1. Get the matching **Installer.exe** and **Uninstaller.exe** from the person distributing your build. For the current local build, open `artifacts\setup\0.2.0\windows-x64\Installer.exe`. Keep the uninstaller from the same folder.
+2. Sign in as the Windows user who will operate XT. Open **Installer.exe → Review**. Check the version, Windows operator and installation directory, then choose **Install** and approve the Windows administrator prompt.
+3. After **Installation complete**, open **Tlachihuani XT** from Start. Choose **Start Services** when you need them. Both services are installed with Manual startup. XT launches independently at subsequent Windows sign-ins.
+
+### Uninstall and keep your downloads
+
+1. In XT, choose **Stop Services**, wait for the icon to turn gray, then choose **Exit tray**. Close XT in other signed-in sessions too.
+2. Open the matching **Uninstaller.exe → Review → Uninstall**. Approve the Windows prompt and wait for **Removal complete**. Windows **Settings → Apps → Installed apps → Tlachihuani → Uninstall** also removes a wizard installation.
+3. Your delivered files and the protected Jobs state stay on disk. Reinstall with the same Windows operator to reuse the retained identities and journal. If the wizard requests a restart, restart Windows before reinstalling.
+
+**Already installed with PowerShell?** Those installations use a separate maintenance path. Follow the [Windows packaging guide](packaging/windows/README.md) for the primary service and the [Jobs operating guide](docs/torrenter.md#windows-installation) for Jobs. The wizard refuses to take ownership of a legacy installation.
+
+See the [setup guide](packaging/setup/README.md) for prerequisites, recovery, logging and visible acceptance tests.
 
 ### Build from source
 
@@ -68,11 +81,12 @@ Use the SDK pinned in [global.json](global.json). Open a visible foreground Powe
 Set-Location -LiteralPath 'C:\Development\XAIHT\Tlachihuani'
 .\scripts\Build.ps1 -Mode Check
 .\scripts\Build.ps1 -Mode Publish
+.\scripts\Build-Setup.ps1
 .\artifacts\publish\Control\Tlachihuani.Control.exe status
 .\artifacts\publish\Tray\Tlachihuani.Tray.exe --show
 ```
 
-**Check** exercises the boundaries and a temporary console service host. **Publish** produces the Service, Control, Tray and Jobs components under `artifacts/publish/`. Windows service registration is a separate installation step.
+**Check** exercises the boundaries and a temporary console service host. **Publish** produces the four application components under `artifacts/publish/`. **Build-Setup** packages them as `artifacts\setup\<version>\windows-x64\Installer.exe` and `artifacts\setup\<version>\windows-x64\Uninstaller.exe`.
 
 </details>
 

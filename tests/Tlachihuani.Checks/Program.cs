@@ -133,6 +133,7 @@ try
                 var client = new Controller(new(id, host.Id, info.FileName));
                 var first = await client.ExecuteAsync("status");
                 Require(first.Ok && first.Service?.Health == "healthy", "Real host failed: " + first.Error);
+                Require(first.Service!.Version == typeof(HealthState).Assembly.GetName().Version!.ToString(3), "Service reported a stale product version");
                 // A client may exit during a status request (including when it cannot verify
                 // the server). Breaking one pipe must leave this same host serving other clients.
                 using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
