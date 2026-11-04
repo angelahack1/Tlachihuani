@@ -5,7 +5,7 @@
       "tlachihuani.client": {
         "type": "Project",
         "dependencies": {
-          "Tlachihuani.Windows": "[0.2.0, )"
+          "Tlachihuani.Windows": "[0.2.1, )"
         }
       },
       "tlachihuani.contracts": {
@@ -14,15 +14,16 @@
       "tlachihuani.core": {
         "type": "Project",
         "dependencies": {
-          "Tlachihuani.Contracts": "[0.2.0, )"
+          "Tlachihuani.Contracts": "[0.2.1, )"
         }
       },
       "tlachihuani.windows": {
         "type": "Project",
         "dependencies": {
-          "Tlachihuani.Core": "[0.2.0, )"
+          "Tlachihuani.Core": "[0.2.1, )"
         }
       }
-    }
+    },
+    "net10.0-windows7.0/win-x64": {}
   }
 }

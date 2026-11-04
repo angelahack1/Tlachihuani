@@ -23,9 +23,9 @@ internal static class Ownership {
     internal static void Inspect(bool remove, bool managed, string operatorSid) {
         Plain(Program); Plain(Common);
         string tray=Path.Combine(Program,"Tray","Tlachihuani.Tray.exe");
-        foreach(var candidate in Process.GetProcessesByName("Tlachihuani.Tray")) using(candidate){
+        if(!remove) foreach(var candidate in Process.GetProcessesByName("Tlachihuani.Tray")) using(candidate){
             try{
-                if(String.Equals(candidate.MainModule.FileName,tray,StringComparison.OrdinalIgnoreCase))
+                if(!remove && String.Equals(candidate.MainModule.FileName,tray,StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("Choose Exit tray in XT before continuing.");
             }catch(System.ComponentModel.Win32Exception){throw new InvalidOperationException("Could not verify the running XT tray. Close XT in other signed-in sessions and retry.");}
         }
@@ -37,7 +37,7 @@ internal static class Ownership {
                     if(!managed || !String.Equals((string)k.GetValue("ImagePath"),"\""+Image(jobs)+"\"",StringComparison.OrdinalIgnoreCase) ||
                        !String.Equals((string)k.GetValue("ObjectName"),@"NT SERVICE\"+name,StringComparison.OrdinalIgnoreCase))
                         throw new InvalidOperationException("The existing "+name+" registration belongs to a different installation. Use its original maintenance tools.");
-                    using(var svc=new ServiceController(name)) if(svc.Status!=ServiceControllerStatus.Stopped)
+                    using(var svc=new ServiceController(name)) if(!remove && svc.Status!=ServiceControllerStatus.Stopped)
                         throw new InvalidOperationException("Choose XT → Stop Services, then Exit tray before continuing.");
                 }
             }
@@ -46,12 +46,10 @@ internal static class Ownership {
             if(!remove && Directory.Exists(data)) CheckExisting(data,jobs,operatorSid);
             if(remove && managed && Directory.Exists(data)) CheckExisting(data,jobs,null);
         }
-        if(remove) return;
-        foreach(string fx in new[]{"Microsoft.WindowsDesktop.App","Microsoft.AspNetCore.App"}) {
-            string dir=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"dotnet","shared",fx);
-            if(!Directory.Exists(dir)||!Directory.GetDirectories(dir,"10.*").Any(x=>File.Exists(Path.Combine(x,fx+".deps.json"))))
-                throw new InvalidOperationException("Install the x64 .NET 10 runtime for "+fx+" before starting setup.");
-        }
+        // Self-contained published payloads are verified by the package builder.
+        // MSI ServiceControl stops the services during removal; Restart Manager
+        // handles locked applications. Do not reject a normal Control Panel /x
+        // because the services are still running before StopServices executes.
     }
     static DirectorySecurity Permissions(string service,string op,bool state) {
         var acl=new DirectorySecurity();

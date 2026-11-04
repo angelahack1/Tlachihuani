@@ -7,3 +7,11 @@ Source repository: [XAIHT/Tlamatini](https://github.com/XAIHT/Tlamatini), refere
 SHA-256 (source and destination): `71de562b49020a30d3ea0d2e5813ce11611fed09250e9340c46f5444237d34be`.
 
 Keep the XAIHT/Angela attribution and original artwork. Do not invent a new logo or imply a different license grant for the brand. Use the original multi-resolution ICO for the future tray and executables. Any preview conversion is a design-view derivative, not a replacement icon.
+
+## README badges
+
+The README uses local SVG badges for the source version, Windows platform, offline ZIP,
+.NET and REST API. They share the hero's slate, blue, teal and gold palette and do not
+depend on an external badge service. Keep `badge-version.svg` aligned with
+`Directory.Build.props` and the README's release notes. The source/package version
+and latest published tag are stated separately; preparing a package does not publish it.

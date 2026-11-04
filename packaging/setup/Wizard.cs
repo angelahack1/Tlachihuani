@@ -25,6 +25,7 @@ internal sealed class Wizard : Form {
     readonly string op=WindowsIdentity.GetCurrent().User.Value;
     int page;
     bool busy;
+    bool installedSuccessfully;
     static bool Managed {get{return MsiQueryProductState(Product.Code)==5;}}
     static void Preflight(bool remove,string sid){
         if(remove && !Managed)throw new InvalidOperationException("This version was not installed by this setup package. For a script installation, follow the Windows packaging guide.");
@@ -52,7 +53,16 @@ internal sealed class Wizard : Form {
         var buttons=new FlowLayoutPanel{AutoSize=true,Dock=DockStyle.Fill,FlowDirection=FlowDirection.RightToLeft,WrapContents=false};grid.Controls.Add(buttons,0,6);
         foreach(var b in new[]{next,back}){b.AutoSize=true;b.Padding=new Padding(15,5,15,5);b.FlatStyle=FlatStyle.Flat;b.FlatAppearance.BorderSize=0;buttons.Controls.Add(b);}
         next.BackColor=Removing?Amber:Teal;next.ForeColor=Bg;back.BackColor=Card;back.ForeColor=Ink;
-        AcceptButton=next;CancelButton=back;next.Click+=async delegate {await Advance();};back.Click+=delegate{if(!busy)Close();};
+        AcceptButton=next;CancelButton=back;next.Click+=async delegate {await Advance();};
+        back.Click+=delegate{
+            if(busy)return;
+            if(installedSuccessfully){
+                try{
+                    Process.Start(new ProcessStartInfo(Path.Combine(Ownership.Program,"Tray","Tlachihuani.Tray.exe"),"--show"){UseShellExecute=true});
+                }catch(Exception ex){MessageBox.Show(this,ex.Message,"Open XT",MessageBoxButtons.OK,MessageBoxIcon.Error);return;}
+            }
+            Close();
+        };
         FormClosing+=delegate(object sender,FormClosingEventArgs e){if(busy)e.Cancel=true;};
         Shown+=delegate{int on=1;DwmSetWindowAttribute(Handle,20,ref on,4);};
         stage.Text="01   /   OVERVIEW";heading.Text=Removing?"Remove the Windows services":"Set up your Windows services";
@@ -79,10 +89,18 @@ internal sealed class Wizard : Form {
             if(rc!=0 && rc!=3010)throw new InvalidOperationException("Windows setup returned "+rc+".");
             if(Managed==Removing)throw new InvalidOperationException("Windows did not confirm the requested installation state.");
             heading.Text=Removing?"Removal complete":"Installation complete";
+            installedSuccessfully=!Removing && rc==0;
             detail.Text=Removing?"The services and packaged files have been removed. Your downloads and job history were preserved.":"Open Tlachihuani XT from Start, then choose Start Services. XT will also appear at your next sign-in.";
             notice.Text=rc==3010?"Restart Windows to finish.":"Installation log: "+log;
         }catch(Exception ex){heading.Text="Setup did not finish";detail.Text=ex.Message;notice.Text=log==null?"Close and retry when ready.":"If installation began, see "+log;}
-        finally{busy=false;page=2;stage.Text="04   /   RESULT";progress.Style=ProgressBarStyle.Blocks;progress.Value=100;back.Visible=false;next.Enabled=true;next.Text="Finish";}
+        finally{
+            busy=false;page=2;stage.Text="04   /   RESULT";progress.Style=ProgressBarStyle.Blocks;progress.Value=100;
+            // Keep XT in the original, unelevated operator session. If someone
+            // started the whole wizard as administrator, direct them to Start.
+            bool elevated=new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator);
+            back.Visible=installedSuccessfully && !elevated;back.Enabled=back.Visible;back.Text="Open XT";
+            next.Enabled=true;next.Text="Finish";
+        }
     }
     static int Apply(string sid,string stamp){
         new SecurityIdentifier(sid); Guid.ParseExact(stamp,"N");

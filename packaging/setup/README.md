@@ -4,9 +4,9 @@ The two x64 Windows wizards use Tlamatini's dark setup palette, Segoe UI and the
 
 ## Install and operate
 
-Use a Windows x64 machine with the standard x64 .NET 10 Windows Desktop and ASP.NET Core shared runtimes. Sign in as the intended operator. Open **Installer.exe**, choose **Review**, confirm the operator, destination and version, and select **Install**. Approve UAC. If a different administrator supplies credentials, the operator shown in the original review remains the delegated operator.
+Use Windows 11 x64. Extract `Tlachihuani-0.2.1-windows-x64.zip` with **Extract All** and read `START-HERE.html`. This package carries private .NET 10 and CPython/libtorrent runtimes; clients do not need to install a runtime or SDK. Sign in as the intended operator. Open **Installer.exe**, choose **Review**, confirm the operator, destination and version, and select **Install**. Approve UAC. If a different administrator supplies credentials, the operator shown in the original review remains the delegated operator.
 
-Wait for **Installation complete**, then choose **Finish**. Start **Tlachihuani XT** from Start and use **Start Services**. The per-machine Startup shortcut displays the tray at sign-in. Windows enforces service permissions separately. The two services run under their own virtual accounts and use Manual startup.
+Wait for **Installation complete**, then choose **Open XT** (available from the original unelevated wizard) or **Finish**. Start **Tlachihuani XT** from Start and use **Start Services**. The per-machine Startup shortcut displays the tray at sign-in. Windows enforces service permissions separately. The two services run under their own virtual accounts and use Manual startup.
 
 ## Remove and reinstall
 
@@ -14,9 +14,9 @@ Stop both services from XT. Exit the tray in every active Windows session. Start
 
 Windows Installer removes registered services, its own shortcuts and packaged files. Downloads, application-generated exports, job state and account manifests are retained. Reinstall as the original operator. Windows Installed apps also provides removal if the standalone uninstaller is lost. A different-version installation or a script-managed deployment must be maintained using the tools for that installation. An in-place upgrade is not offered by these wizards.
 
-### Moving from 0.1.0 to 0.2.0
+### Moving from 0.1.0 / 0.2.0 to 0.2.1
 
-Keep the uninstaller that came with 0.1.0. Stop Services, exit XT, remove the old wizard installation and run the 0.2.0 installer as the same operator. Its build output is `artifacts/setup/0.2.0/windows-x64/`.
+Stop Services, exit XT, remove the old wizard installation through Windows or its original uninstaller and run the 0.2.1 installer as the same operator. Its build output is `artifacts/setup/0.2.1/windows-x64/`. The previously published 0.2.0 tag is unchanged.
 
 For a legacy PowerShell installation, use its [unregister scripts](../windows/README.md) first. Disable its per-user XT startup entry. Preserve the legacy program directory and both ProgramData directories under separate backup names before a fresh wizard install. A journal in a renamed legacy folder is a backup, not an imported queue. Leave it intact.
 
@@ -36,11 +36,23 @@ From a verified visible foreground PowerShell console in the repository, keep th
 .\scripts\Test-Setup.ps1
 ```
 
-Building setup requires Windows PowerShell, 64-bit Windows, Python 3, the .NET SDK and the Windows .NET Framework 4.x compiler. The build installs WiX 4.0.6 under `artifacts/setup-tools` on first use. Distribute the matching executables from `artifacts/setup/<version>/windows-x64/`. The local build is unsigned. Authenticode signing and verification with the publisher's own certificate are release steps.
+Building setup requires Windows PowerShell, 64-bit Windows, Python 3, the .NET SDK and the Windows .NET Framework 4.x compiler. The build installs WiX 4.0.6 under `artifacts/setup-tools` on first use. Distribute `artifacts/setup/<version>/Tlachihuani-<version>-windows-x64.zip` and its `.sha256`. The archive contains an allowlist of six public files; it never archives the checkout, credentials or application state. The local build is unsigned. Authenticode signing and verification with the publisher's own certificate are release steps.
+
+`tests/integration/check_setup_zip.py <zip> <fresh-app-owned-folder>` checks ZIP CRC, exact contents, extracted file hashes, sizes and version. `check_setup_payload.py` verifies cabinet bytes against published runtimes. Run both from the visible console.
 
 The default test opens the shipping executables visibly, checks their version labels and exercises Review and Cancel.
 
-* **Isolated SCM test on a developer workstation.** Run `.\scripts\Test-Setup.ps1 -Isolated` in an elevated, verified foreground PowerShell console. It builds a separately named QA package with inert test services, independent product and service IDs, paths and shortcuts. The real Windows Installer engine installs and removes that package twice. The test checks startup policy, virtual accounts and retained identity. Its protected QA state remains for inspection.
-* **Full product acceptance in a disposable guest.** Run `.\scripts\Test-Setup.ps1 -WindowsSandbox` in a verified foreground console with Windows Sandbox enabled. The guest receives read-only mappings of the bundle, harness and .NET runtimes and a dedicated writable results folder. Keep the guest visible. The test installs the shipping binaries, starts both services, checks the Jobs API, removes the software and reinstalls it with the retained identity. Results are under `artifacts/verification` in a separate directory for each run.
+* **Isolated SCM test on a developer workstation.** Run `.\scripts\Test-Setup.ps1 -Isolated` in an elevated, verified foreground PowerShell console. It builds a separately named QA package with inert test services, independent product and service IDs, paths and shortcuts. The real Windows Installer engine installs and removes that package twice. The test checks startup policy, virtual accounts, ARP fields, application discovery values and shortcuts. It opens Programs and Features for a separate visual row check, then runs the registered MSI uninstall command with services still running. It verifies removal and retained identity before reinstalling. Its protected QA state remains for inspection.
+* **Full product acceptance in a disposable guest.** Run `.\scripts\Test-Setup.ps1 -WindowsSandbox` in a verified foreground console with Windows Sandbox enabled. The guest receives read-only mappings of the bundle and harness and a dedicated writable results folder. Keep the guest visible. The test installs the shipping binaries, starts both services, checks the Jobs API, removes the software and reinstalls it with the retained identity. Results are under `artifacts/verification` in a separate directory for each run.
 
 A successful workstation review or isolated SCM test does not certify production Jobs startup. Use the guest test or a clean Windows QA machine for that release gate.
+
+## Native Windows registration
+
+Windows Installer owns exactly one x64 per-machine entry at `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{ProductCode}`. It supplies DisplayName, DisplayVersion, Publisher, a cached XT product icon, EstimatedSize and the native `/x` UninstallString. Setup adds InstallLocation, HelpLink, URLInfoAbout and contact information through MSI properties. Modify and Repair are disabled; Uninstall remains available. The setup does not overwrite the system-owned uninstall command or create a duplicate entry.
+
+`HKLM\Software\XAIHT\Tlachihuani` contains InstallLocation, Version and OperatorSID. Those values and setup-owned shortcut markers are MSI components and disappear on removal. Protected ProgramData identities/history are separate and preserved. Start provides XT (with `--show`), the setup guide and native Uninstall; Common Startup opens XT without starting services.
+
+The installed directory includes the matching Uninstaller.exe and offline guide. Native Control Panel removal uses cached MSI metadata and works even if the original ZIP has been deleted. Windows Installer stops the services and manages files in use; close XT before removing for an orderly shutdown. A restart may be required if a file remains locked.
+
+References: [Windows uninstall registration](https://learn.microsoft.com/en-us/windows/win32/msi/uninstall-registry-key), [native uninstall command](https://learn.microsoft.com/en-us/windows/win32/msi/arpnomodify), [self-contained .NET deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/).

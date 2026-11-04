@@ -13,16 +13,25 @@
 </p>
 
 <p align="center">
-  <a href="#installation"><img src="assets/branding/badge-windows.svg" alt="Windows x64 installation" /></a>
+  <a href="docs/releases/v0.2.1.md"><img src="assets/branding/badge-version.svg" alt="Source version 0.2.1 — packaging notes" /></a>
+  <a href="#installation"><img src="assets/branding/badge-windows.svg" alt="Windows 11 x64 installation" /></a>
+  <a href="packaging/setup/README.md"><img src="assets/branding/badge-package.svg" alt="Offline ZIP installation package" /></a>
   <a href="#build-from-source"><img src="assets/branding/badge-dotnet.svg" alt="Build with .NET 10" /></a>
   <a href="docs/torrenter.md"><img src="assets/branding/badge-rest.svg" alt="REST API v1 guide" /></a>
 </p>
 
 <p align="center">
-  <a href="docs/releases/v0.2.0.md">v0.2.0 release notes</a> ·
+  <b>Windows installer &amp; uninstaller · Runtimes included · XT tray controls</b><br />
+  Version <b>0.2.1</b>: package prepared locally; binaries unsigned.<br />
+  Latest tagged version: <a href="https://github.com/angelahack1/Tlachihuani/tree/v0.2.0"><b>v0.2.0</b></a>.
+</p>
+
+<p align="center">
+  <a href="docs/releases/v0.2.1.md">What's new in 0.2.1</a> ·
+  <a href="#installation">Install &amp; uninstall</a> ·
+  <a href="packaging/setup/README.md">Package guide</a> ·
   <a href="#first-download">First download</a> ·
   <a href="#tray-controls">Tray controls</a> ·
-  <a href="#installation">Installation</a> ·
   <a href="#documentation">Documentation</a>
 </p>
 
@@ -52,18 +61,18 @@ If XT is missing after setup, open **Tlachihuani XT** from Start or press **Win+
 
 ## Installation
 
-Use **Windows x64** with the **.NET 10 Desktop** and **ASP.NET Core 10** shared runtimes. Windows runs two independent services. `Tlachihuani` reports lifecycle and health. `Tlachihuani.Jobs` hosts Torrenter. The XT tray runs in the signed-in Windows session.
+Use **Windows 11 x64**. The download includes private .NET and Python runtimes; no SDK or separate runtime installation is required. Windows runs two independent services. `Tlachihuani` reports lifecycle and health. `Tlachihuani.Jobs` hosts Torrenter. The XT tray runs in the signed-in Windows session.
 
 ### Install with the Windows wizard
 
-1. Get the matching **Installer.exe** and **Uninstaller.exe** from the person distributing your build. For the current local build, open `artifacts\setup\0.2.0\windows-x64\Installer.exe`. Keep the uninstaller from the same folder.
+1. Get **Tlachihuani-0.2.1-windows-x64.zip** from your distributor. Right-click it → **Extract All**, then open **START-HERE.html** for the offline illustrated guide. The local build produces the ZIP in `artifacts\setup\0.2.1\`.
 2. Sign in as the Windows user who will operate XT. Open **Installer.exe → Review**. Check the version, Windows operator and installation directory, then choose **Install** and approve the Windows administrator prompt.
-3. After **Installation complete**, open **Tlachihuani XT** from Start. Choose **Start Services** when you need them. Both services are installed with Manual startup. XT launches independently at subsequent Windows sign-ins.
+3. After **Installation complete**, choose **Open XT**, or open **Tlachihuani XT** from Start. Choose **Start Services** when you need them. Both services are installed with Manual startup. XT launches independently at subsequent Windows sign-ins.
 
 ### Uninstall and keep your downloads
 
 1. In XT, choose **Stop Services**, wait for the icon to turn gray, then choose **Exit tray**. Close XT in other signed-in sessions too.
-2. Open the matching **Uninstaller.exe → Review → Uninstall**. Approve the Windows prompt and wait for **Removal complete**. Windows **Settings → Apps → Installed apps → Tlachihuani → Uninstall** also removes a wizard installation.
+2. Open **Control Panel → Programs → Programs and Features → Tlachihuani → Uninstall**. Windows **Settings → Apps → Installed apps** and **Uninstall Tlachihuani** in Start provide the same registered removal. The matching **Uninstaller.exe → Review → Uninstall** is also included. Approve the Windows prompt.
 3. Your delivered files and the protected Jobs state stay on disk. Reinstall with the same Windows operator to reuse the retained identities and journal. If the wizard requests a restart, restart Windows before reinstalling.
 
 **Already installed with PowerShell?** Those installations use a separate maintenance path. Follow the [Windows packaging guide](packaging/windows/README.md) for the primary service and the [Jobs operating guide](docs/torrenter.md#windows-installation) for Jobs. The wizard refuses to take ownership of a legacy installation.
@@ -86,7 +95,7 @@ Set-Location -LiteralPath 'C:\Development\XAIHT\Tlachihuani'
 .\artifacts\publish\Tray\Tlachihuani.Tray.exe --show
 ```
 
-**Check** exercises the boundaries and a temporary console service host. **Publish** produces the four application components under `artifacts/publish/`. **Build-Setup** packages them as `artifacts\setup\<version>\windows-x64\Installer.exe` and `artifacts\setup\<version>\windows-x64\Uninstaller.exe`.
+**Check** exercises the boundaries and a temporary console service host. **Publish** produces the four self-contained x64 components under `artifacts/publish/`. **Build-Setup** produces the install/remove wizards, offline guide, manifest and checksums, then builds `artifacts/setup/<version>/Tlachihuani-<version>-windows-x64.zip` and its `.sha256`. Distribute those two files. The current build is unsigned; a publisher certificate is required for Authenticode signing.
 
 </details>
 

@@ -1,10 +1,10 @@
-# Tlachihuani handoff · 3 November 2026 · v0.2.0
+# Tlachihuani handoff · 4 November 2026 · v0.2.1 packaging
 
 Work in `C:\Development\XAIHT\Tlachihuani`. The separate Tlamatini reference checkout is `C:\Development\XAIHT\Tlamatini`. Read AGENTS.md, CLAUDE.md, [the Torrenter operating guide](docs/torrenter.md) and [implementation status](docs/implementation-status.md). The design baseline is Revision 05 of `TlachihuaniKickoffDesign.html` on Angela’s Desktop.
 
 ## Installed now
 
-For fresh deployments, use the [graphical Windows setup guide](packaging/setup/README.md). Read the [verification status](docs/implementation-status.md) before distributing a setup build. The workstation now runs the 0.1.0 wizard installation. The operator confirmed the green XT icon, a ready Jobs API and the signed-in workspace. The 0.2.0 tag identifies the subsequent release build. See the [release notes](docs/releases/v0.2.0.md).
+For fresh deployments, use the [graphical Windows setup guide](packaging/setup/README.md). Read the [verification status](docs/implementation-status.md) before distributing a setup build. The workstation now runs the 0.1.0 wizard installation. The operator confirmed the green XT icon, a ready Jobs API and the signed-in workspace. The 0.2.0 tag identifies the previous published build. Current uncommitted work produces the 0.2.1 offline ZIP with private runtimes and Windows uninstall registration. See the [packaging notes](docs/releases/v0.2.1.md).
 
 * On ANGYSLAP both services are set to Manual. The delegated operator is `ANGYSLAP\angel`. XT starts independently at user sign-in. **Start Services** brings up the services and Torrenter on port 12064. **Stop Services** leaves only XT running. Jobs has a separate manifest from the original service.
 * XT is gray until both services are running and Torrenter's API responds. The context menu also offers **Show panel** and **Exit tray**. The exit label reads **Exit tray (service keeps running)** until XT confirms both services are stopped or absent and any pending change finishes. The optional historical commands are preserved in `src/Tlachihuani.Tray/TrayMenu.cs`.

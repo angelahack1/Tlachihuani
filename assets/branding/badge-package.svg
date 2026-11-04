@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="183" height="28" role="img" aria-label="PACKAGE OFFLINE ZIP">
+  <title>PACKAGE OFFLINE ZIP</title>
+  <rect width="84" height="28" fill="#172533"/>
+  <rect x="84" width="99" height="28" fill="#79DED1"/>
+  <g font-family="Segoe UI,Arial,sans-serif" font-size="12" font-weight="700" text-anchor="middle">
+    <text x="42" y="18" letter-spacing="1" fill="#F0F6F8">PACKAGE</text>
+    <text x="133.5" y="18" fill="#101827">OFFLINE ZIP</text>
+  </g>
+</svg>

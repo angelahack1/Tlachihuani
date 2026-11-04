@@ -3,7 +3,7 @@
 
 This is the onboarding document for Claude, Codex, and every coding agent working on Tlachihuani.
 
-For v0.2.0 packaging, migration and verification, read the [release notes](docs/releases/v0.2.0.md) and the [Windows setup guide](packaging/setup/README.md). Change the product version in `Directory.Build.props` and refresh internal project lock references together.
+For v0.2.1 ZIP packaging, migration and verification, read the [packaging notes](docs/releases/v0.2.1.md) and the [Windows setup guide](packaging/setup/README.md). Change the product version in `Directory.Build.props` and refresh internal project lock references together.
 
 ## Project identity and controller
 

@@ -1,5 +1,10 @@
 param([switch]$WindowsSandbox,[switch]$Isolated)
 $ErrorActionPreference='Stop'
+function Get-SetupDigest([string]$Path){
+ $hash=[Security.Cryptography.SHA256]::Create()
+ $stream=[IO.File]::OpenRead($Path)
+ try{[BitConverter]::ToString($hash.ComputeHash($stream))}finally{$stream.Dispose();$hash.Dispose()}
+}
 . "$PSScriptRoot\Assert-Visible.ps1"
 Assert-VisibleDevelopmentConsole
 $root=Split-Path $PSScriptRoot
@@ -32,7 +37,7 @@ $guestBundle=Join-Path $work 'bundle'
 [void][IO.Directory]::CreateDirectory($guestBundle)
 foreach($name in 'Installer.exe','Uninstaller.exe'){
     Copy-Item -LiteralPath (Join-Path $bundle $name) -Destination $guestBundle
-    if((Get-FileHash (Join-Path $bundle $name)).Hash -ne (Get-FileHash (Join-Path $guestBundle $name)).Hash){throw "Sandbox bundle copy differs: $name"}
+    if((Get-SetupDigest (Join-Path $bundle $name)) -ne (Get-SetupDigest (Join-Path $guestBundle $name))){throw "Sandbox bundle copy differs: $name"}
 }
 $results=Join-Path $work 'results'
 [void][IO.Directory]::CreateDirectory($tools)
@@ -53,8 +58,8 @@ try{
 function Map-Folder($hostPath,$guestPath,$readOnly){
  "<MappedFolder><HostFolder>$([Security.SecurityElement]::Escape($hostPath))</HostFolder><SandboxFolder>$guestPath</SandboxFolder><ReadOnly>$readOnly</ReadOnly></MappedFolder>"
 }
-$maps=@((Map-Folder $guestBundle 'C:\SetupBundle' 'true'),(Map-Folder $tools 'C:\SetupTools' 'true'),(Map-Folder $results 'C:\SetupResults' 'false'),(Map-Folder "$env:ProgramFiles\dotnet" 'C:\Program Files\dotnet' 'true')) -join ''
-$config="<Configuration><MappedFolders>$maps</MappedFolders><LogonCommand><Command>C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -NoExit -ExecutionPolicy RemoteSigned -File C:\SetupTools\test.ps1</Command></LogonCommand></Configuration>"
+$maps=@((Map-Folder $guestBundle 'C:\SetupBundle' 'true'),(Map-Folder $tools 'C:\SetupTools' 'true'),(Map-Folder $results 'C:\SetupResults' 'false')) -join ''
+$config="<Configuration><MappedFolders>$maps</MappedFolders><LogonCommand><Command>C:\Windows\System32\conhost.exe powershell.exe -NoProfile -NoExit -ExecutionPolicy RemoteSigned -File C:\SetupTools\test.ps1</Command></LogonCommand></Configuration>"
 $target="$work\setup.wsb"
 $config|Set-Content -LiteralPath $target -Encoding UTF8
 Write-Host "Visible Windows Sandbox acceptance: $results"

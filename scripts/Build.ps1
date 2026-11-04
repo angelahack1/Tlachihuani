@@ -16,7 +16,9 @@ try {
     }
     if ($Mode -eq 'Publish') {
         foreach ($component in @('Service', 'Control', 'Tray', 'Jobs')) {
-            dotnet publish "src/Tlachihuani.$component/Tlachihuani.$component.csproj" --configuration Release --no-restore --output "artifacts/publish/$component"
+            # Private runtimes travel with each executable. No client SDK/runtime
+            # install or self-extraction into a user's TEMP directory is needed.
+            dotnet publish "src/Tlachihuani.$component/Tlachihuani.$component.csproj" --configuration Release --runtime win-x64 --self-contained true -p:RestoreLockedMode=true --output "artifacts/publish/$component"
             if ($LASTEXITCODE -ne 0) { throw "$component publish failed: $LASTEXITCODE" }
         }
     }

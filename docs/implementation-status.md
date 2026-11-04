@@ -1,3 +1,11 @@
+# Offline ZIP and Windows registration — 2026-11-04
+
+The 0.2.1 packaging update creates a self-contained Windows x64 ZIP with both wizards, an offline styled guide, quick-start instructions, a file manifest and SHA-256 checksums. Separate .NET 10 installation is no longer required. See [the packaging notes](releases/v0.2.1.md) and [setup guide](../packaging/setup/README.md).
+
+Visible workstation verification passed all 11 lifecycle checks, ZIP extraction/hash checks and a byte-for-byte comparison of 1,104 published runtime files plus all maintenance files across three MSI cabinets. Both shipping wizards showed 0.2.1 and passed Review/Cancel. A separately named QA package completed real MSI installation, native service start, registered Windows uninstall with services running, reinstall retaining its identity and final wizard removal. Registration checks cover version, publisher, size, install directory, the Windows Installer ProductIcon, app discovery values and Start/login/uninstall shortcuts. Programs and Features was also visually inspected: the QA entry appeared beside Tlamatini with XT and version 0.2.1. Explorer's virtualized item flags were not used to claim visual success.
+
+These SCM acceptance tests use inert QA service binaries with separate identities and paths. They do not certify the production Jobs workload or upgrade the existing 0.1.0 workstation installation. The package is unsigned. Reboot, cross-account and long-running transfer acceptance remain separate gates.
+
 # Windows setup — 2026-11-03
 
 The versioned setup output under `artifacts/setup/<version>/windows-x64/` contains the graphical installer and matching uninstaller. Workstation UI automation has exercised both version labels, Review and Cancel. Visible isolated acceptance installed the QA package, started both SCM services, removed it, reinstalled it with the same protected Jobs identity and removed it again. The test uses inert service binaries and separate product and service IDs. Full production-payload acceptance requires a clean machine or Windows Sandbox. Build, maintenance and test commands are in the [Windows setup guide](../packaging/setup/README.md).
