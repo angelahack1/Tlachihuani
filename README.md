@@ -21,9 +21,9 @@
 </p>
 
 <p align="center">
-  <b>Windows installer &amp; uninstaller · Runtimes included · XT tray controls</b><br />
-  Version <b>0.2.1</b>: package prepared locally; binaries unsigned.<br />
-  Latest tagged version: <a href="https://github.com/angelahack1/Tlachihuani/tree/v0.2.0"><b>v0.2.0</b></a>.
+  <b>Offline installer &amp; uninstaller · Bundled runtimes · Control Panel removal</b><br />
+  Source <b>v0.2.1</b> · <a href="https://github.com/angelahack1/Tlachihuani/commit/506f45f5ba889e27f06164934d7ba3bc7bfda2b0">Committed 4 November 2026 · 506f45f</a><br />
+  Illustrated setup guide · SHA-256 checksums · XT at Windows sign-in
 </p>
 
 <p align="center">

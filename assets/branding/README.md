@@ -13,5 +13,6 @@ Keep the XAIHT/Angela attribution and original artwork. Do not invent a new logo
 The README uses local SVG badges for the source version, Windows platform, offline ZIP,
 .NET and REST API. They share the hero's slate, blue, teal and gold palette and do not
 depend on an external badge service. Keep `badge-version.svg` aligned with
-`Directory.Build.props` and the README's release notes. The source/package version
-and latest published tag are stated separately; preparing a package does not publish it.
+`Directory.Build.props` and the README's release notes. Link the source version to
+its verified commit; do not assume a same-numbered tag contains those changes.
+Source commits, tags and downloadable packages have separate publication states.
