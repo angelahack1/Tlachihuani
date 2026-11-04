@@ -6,7 +6,9 @@ The two x64 Windows wizards use Tlamatini's dark setup palette, Segoe UI and the
 
 Use Windows 11 x64. Extract `Tlachihuani-0.2.1-windows-x64.zip` with **Extract All** and read `START-HERE.html`. This package carries private .NET 10 and CPython/libtorrent runtimes; clients do not need to install a runtime or SDK. Sign in as the intended operator. Open **Installer.exe**, choose **Review**, confirm the operator, destination and version, and select **Install**. Approve UAC. If a different administrator supplies credentials, the operator shown in the original review remains the delegated operator.
 
-Wait for **Installation complete**, then choose **Open XT** (available from the original unelevated wizard) or **Finish**. Start **Tlachihuani XT** from Start and use **Start Services**. The per-machine Startup shortcut displays the tray at sign-in. Windows enforces service permissions separately. The two services run under their own virtual accounts and use Manual startup.
+Before Review, choose **Show XT at Windows sign-in (all users of this PC)** or leave it unchecked. Review displays that choice. After **Installation complete**, the original unelevated wizard opens the gray tray icon once; both services remain stopped. **Start menu and Desktop shortcuts** always reopen XT. If the entire wizard was launched as administrator, use either shortcut from your normal Desktop session. Choose **Start Services** in XT when needed.
+
+The optional per-machine Startup shortcut displays only XT at sign-in. With the option unchecked, no login shortcut is installed. The services use Manual startup under separate virtual accounts and stay stopped after reboot. Signing out/in does not stop services already started by the operator. Windows enforces service permissions separately.
 
 ## Remove and reinstall
 
@@ -28,6 +30,10 @@ If Review reports an existing service, unexpected image, different operator, or 
 
 ## Reproduce a build
 
+For the complete release, run **`Build-Release.cmd`** from a visible Command Prompt at the repository root (or `.\Build-Release.cmd` in PowerShell). It reads the latest numeric local release tag, stamps product versions, rebuilds into fresh staging, checks the payload and writes the ZIP plus SHA-256 into **`dist/`**. It performs no Git writes or publication. See [the full command guide](../../docs/release-building.md).
+
+For lower-level component development:
+
 From a verified visible foreground PowerShell console in the repository, keep the console open and run:
 
 ```powershell
@@ -42,6 +48,14 @@ Building setup requires Windows PowerShell, 64-bit Windows, Python 3, the .NET S
 
 The default test opens the shipping executables visibly, checks their version labels and exercises Review and Cancel.
 
+For an automated test of both login-startup choices, run
+`tests\integration\Test-SetupStartup.ps1 -PublishDirectory <fresh-publish-directory>`
+from a visible administrator PowerShell console. It uses separate QA service and
+product names, installs with startup off and on through real MSI transactions,
+checks Start/Desktop/login shortcuts and stopped Manual services, then removes
+each installation through its Windows product registration. It preserves QA
+identity state and does not touch the production installation or downloads.
+
 * **Isolated SCM test on a developer workstation.** Run `.\scripts\Test-Setup.ps1 -Isolated` in an elevated, verified foreground PowerShell console. It builds a separately named QA package with inert test services, independent product and service IDs, paths and shortcuts. The real Windows Installer engine installs and removes that package twice. The test checks startup policy, virtual accounts, ARP fields, application discovery values and shortcuts. It opens Programs and Features for a separate visual row check, then runs the registered MSI uninstall command with services still running. It verifies removal and retained identity before reinstalling. Its protected QA state remains for inspection.
 * **Full product acceptance in a disposable guest.** Run `.\scripts\Test-Setup.ps1 -WindowsSandbox` in a verified foreground console with Windows Sandbox enabled. The guest receives read-only mappings of the bundle and harness and a dedicated writable results folder. Keep the guest visible. The test installs the shipping binaries, starts both services, checks the Jobs API, removes the software and reinstalls it with the retained identity. Results are under `artifacts/verification` in a separate directory for each run.
 
@@ -51,7 +65,7 @@ A successful workstation review or isolated SCM test does not certify production
 
 Windows Installer owns exactly one x64 per-machine entry at `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\{ProductCode}`. It supplies DisplayName, DisplayVersion, Publisher, a cached XT product icon, EstimatedSize and the native `/x` UninstallString. Setup adds InstallLocation, HelpLink, URLInfoAbout and contact information through MSI properties. Modify and Repair are disabled; Uninstall remains available. The setup does not overwrite the system-owned uninstall command or create a duplicate entry.
 
-`HKLM\Software\XAIHT\Tlachihuani` contains InstallLocation, Version and OperatorSID. Those values and setup-owned shortcut markers are MSI components and disappear on removal. Protected ProgramData identities/history are separate and preserved. Start provides XT (with `--show`), the setup guide and native Uninstall; Common Startup opens XT without starting services.
+`HKLM\Software\XAIHT\Tlachihuani` contains InstallLocation, Version, OperatorSID and TrayAtLogin. Those values and setup-owned shortcut markers are MSI components and disappear on removal. Protected ProgramData identities/history are separate and preserved. Start provides XT (with `--show`), the setup guide and native Uninstall. The public Desktop always provides XT with `--show`. Common Startup opens XT only when setup receives `TLTRAYSTARTUP=1`; silent MSI installation defaults to `0`. No setup or login action starts a service.
 
 The installed directory includes the matching Uninstaller.exe and offline guide. Native Control Panel removal uses cached MSI metadata and works even if the original ZIP has been deleted. Windows Installer stops the services and manages files in use; close XT before removing for an orderly shutdown. A restart may be required if a file remains locked.
 

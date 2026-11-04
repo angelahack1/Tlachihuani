@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="docs/releases/v0.2.1.md"><img src="assets/branding/badge-version.svg" alt="Source version 0.2.1 — packaging notes" /></a>
+  <a href="docs/releases/v0.2.1.md"><img src="assets/branding/badge-version.svg" alt="Latest released version: v0.2.1 — release notes" /></a>
   <a href="#installation"><img src="assets/branding/badge-windows.svg" alt="Windows 11 x64 installation" /></a>
   <a href="packaging/setup/README.md"><img src="assets/branding/badge-package.svg" alt="Offline ZIP installation package" /></a>
   <a href="#build-from-source"><img src="assets/branding/badge-dotnet.svg" alt="Build with .NET 10" /></a>
@@ -21,9 +21,9 @@
 </p>
 
 <p align="center">
+  <b>Latest released version: <a href="docs/releases/v0.2.1.md">v0.2.1</a></b><br />
   <b>Offline installer &amp; uninstaller · Bundled runtimes · Control Panel removal</b><br />
-  Source <b>v0.2.1</b> · <a href="https://github.com/angelahack1/Tlachihuani/commit/506f45f5ba889e27f06164934d7ba3bc7bfda2b0">Committed 4 November 2026 · 506f45f</a><br />
-  Illustrated setup guide · SHA-256 checksums · XT at Windows sign-in
+  Illustrated setup guide · SHA-256 checksums · Optional XT at sign-in · Desktop shortcut
 </p>
 
 <p align="center">
@@ -65,9 +65,10 @@ Use **Windows 11 x64**. The download includes private .NET and Python runtimes; 
 
 ### Install with the Windows wizard
 
-1. Get **Tlachihuani-0.2.1-windows-x64.zip** from your distributor. Right-click it → **Extract All**, then open **START-HERE.html** for the offline illustrated guide. The local build produces the ZIP in `artifacts\setup\0.2.1\`.
-2. Sign in as the Windows user who will operate XT. Open **Installer.exe → Review**. Check the version, Windows operator and installation directory, then choose **Install** and approve the Windows administrator prompt.
-3. After **Installation complete**, choose **Open XT**, or open **Tlachihuani XT** from Start. Choose **Start Services** when you need them. Both services are installed with Manual startup. XT launches independently at subsequent Windows sign-ins.
+1. Get **Tlachihuani-0.2.1-windows-x64.zip** from your distributor. Right-click it → **Extract All**, then open **START-HERE.html** for the offline illustrated guide. The release command produces the ZIP in `dist\`.
+2. Sign in as the Windows user who will operate XT. Open **Installer.exe** and choose whether **XT should appear at Windows sign-in**. This choice applies to all Windows users on the PC. Select **Review**, check the version, operator, destination and startup choice, then choose **Install** and approve Windows' administrator prompt.
+3. After **Installation complete**, XT appears gray in your normal Windows session. Check the hidden-icons arrow beside the clock. **Start menu and Desktop shortcuts** always let you reopen it. If the entire wizard was launched as administrator, open XT from either shortcut yourself.
+4. Choose **Start Services** only when needed. Both services remain **Stopped / Manual** after installation and reboot. Login opens XT only when you selected that option; it never starts services or downloads. With the option unchecked, open XT manually after signing in.
 
 ### Uninstall and keep your downloads
 
@@ -80,6 +81,16 @@ Use **Windows 11 x64**. The download includes private .NET and Python runtimes; 
 See the [setup guide](packaging/setup/README.md) for prerequisites, recovery, logging and visible acceptance tests.
 
 ### Build from source
+
+**Create the complete distributable from Command Prompt at the repository root:**
+
+```bat
+Build-Release.cmd
+```
+
+Or run `.\Build-Release.cmd` in a visible PowerShell console. Each run reads the highest numeric local `vX.Y.Z` release tag, stamps the product and internal project references, rebuilds the four components and installer, and verifies the package before writing **`dist\Tlachihuani-<version>-windows-x64.zip`** and **`.zip.sha256`**. Upload those two files to your GitHub Release. The script never commits, creates tags or uploads anything.
+
+The current checkout, including local edits, supplies the code; the tag supplies its version. Keep your local tags current. Prerelease tags are ignored, and a highest release tag outside the checkout's history stops the build. Fresh staging prevents old published files from leaking into a new ZIP. Build logs and source provenance stay under `artifacts/release-builds/`. See the [release command guide](docs/release-building.md) for prerequisites and acceptance checks.
 
 <details>
 <summary><b>Show PowerShell commands and runtime requirements</b></summary>
@@ -95,7 +106,7 @@ Set-Location -LiteralPath 'C:\Development\XAIHT\Tlachihuani'
 .\artifacts\publish\Tray\Tlachihuani.Tray.exe --show
 ```
 
-**Check** exercises the boundaries and a temporary console service host. **Publish** produces the four self-contained x64 components under `artifacts/publish/`. **Build-Setup** produces the install/remove wizards, offline guide, manifest and checksums, then builds `artifacts/setup/<version>/Tlachihuani-<version>-windows-x64.zip` and its `.sha256`. Distribute those two files. The current build is unsigned; a publisher certificate is required for Authenticode signing.
+These lower-level commands are for component development. **Check** exercises the lifecycle boundaries. **Publish** produces the four self-contained x64 components under `artifacts/publish/`. **Build-Setup** packages those published bytes. Use **Build-Release.cmd** above for a fresh, verified distributable in `dist`. The current build is unsigned; a publisher certificate is required for Authenticode signing.
 
 </details>
 

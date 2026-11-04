@@ -9,6 +9,7 @@ __pycache__/
 *.suo
 TestResults/
 artifacts/
+dist/
 Temp/
 logs/
 state/

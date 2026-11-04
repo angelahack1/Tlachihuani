@@ -10,9 +10,11 @@ Keep the XAIHT/Angela attribution and original artwork. Do not invent a new logo
 
 ## README badges
 
-The README uses local SVG badges for the source version, Windows platform, offline ZIP,
+The README uses local SVG badges for the latest release, Windows platform, offline ZIP,
 .NET and REST API. They share the hero's slate, blue, teal and gold palette and do not
 depend on an external badge service. Keep `badge-version.svg` aligned with
-`Directory.Build.props` and the README's release notes. Link the source version to
-its verified commit; do not assume a same-numbered tag contains those changes.
-Source commits, tags and downloadable packages have separate publication states.
+`Directory.Build.props` and the README's release notes. When Angela specifies a
+version, present that number as the latest released version immediately. Do not
+introduce competing source, pending or tag-based version labels. Preserve historical
+release entries and dated verification evidence; a documentation update does not
+authorize commits, pushes, tags or executable builds.

@@ -1,3 +1,43 @@
+# Release command and optional tray startup — 2026-11-04
+
+`Build-Release.cmd` now generates `dist/Tlachihuani-<version>-windows-x64.zip`
+and its SHA-256 from the latest numeric stable local Git tag and the current
+checkout. Each run freshly stages all four self-contained components, setup,
+the offline guide and the six-file public bundle. The builder neither commits
+nor uploads. See [release building](release-building.md).
+
+Setup asks whether XT should appear at Windows sign-in (a common shortcut for
+all Windows users), always installs Start/Desktop shortcuts, and leaves both
+services stopped/Manual. The normal unelevated wizard launches XT once after
+success. Login never starts services; the operator uses Start Services in XT.
+
+Two visible release-command runs completed at 0.2.1, each passing four release
+version tests, eleven lifecycle checks, a byte-for-byte comparison of 1,100
+runtime files plus maintenance files in three MSI cabinets, and ZIP CRC,
+allowlist, extraction, size and hash checks. The current ZIP is 103,415,658 bytes;
+SHA-256: `013f1ce6d3d60c92a331d63ff39684fe263cdbb0bdc340f23295fec9747240af`.
+Run evidence: `artifacts/release-builds/20261104-195653-49a20ec3/build.log`.
+
+The actual packaged installer was visually checked with the startup choice
+checked and unchecked; Review displayed Yes/No correctly, version 0.2.1,
+Start/Desktop shortcuts and stopped/Manual services without observed clipping.
+It correctly refused to overwrite the existing workstation installation.
+
+`tests/integration/Test-SetupStartup.ps1` then performed real MSI install/remove
+cycles for startup=0 and startup=1 using separately named inert QA services.
+Both cycles confirmed stopped/Manual virtual-account services, correct
+Start/Desktop shortcuts, login shortcut absence/presence, persisted preference,
+Windows uninstall registration, complete shortcut/service removal and retained
+identity across reinstall. All four MSI transactions returned 0. Evidence:
+`artifacts/verification/startup-e41091ef50b44a18b05d3cbee2302c69/`.
+The final whitespace check detected CRLFs in the branding notes, subsequently
+normalized; that documentation finding did not invalidate the MSI results.
+
+These tests do not replace production installation, automatic XT launch,
+cross-account login and reboot acceptance on a clean Windows machine. The
+shipping package remains unsigned. Existing production services/downloads were
+not modified by the QA test.
+
 # Offline ZIP and Windows registration — 2026-11-04
 
 The 0.2.1 packaging update creates a self-contained Windows x64 ZIP with both wizards, an offline styled guide, quick-start instructions, a file manifest and SHA-256 checksums. Separate .NET 10 installation is no longer required. See [the packaging notes](releases/v0.2.1.md) and [setup guide](../packaging/setup/README.md).

@@ -52,6 +52,24 @@ try:
     assert props["Manufacturer"] == "XAIHT" and props["ARPPRODUCTICON"] == "XT.ico"
     assert props["ARPHELPLINK"].startswith("https://github.com/angelahack1/Tlachihuani")
     assert "ARPNOREMOVE" not in props and "ARPSYSTEMCOMPONENT" not in props
+    assert props["TLTRAYSTARTUP"] == "0", "Silent installs must not opt into login startup"
+    assert "TLTRAYSTARTUP" in props["SecureCustomProperties"].split(";")
+    components = {c: (d, condition) for c, d, condition in rows("SELECT `Component`,`Directory_`,`Condition` FROM `Component`", 3)}
+    shortcuts = list(rows("SELECT `Shortcut`,`Component_`,`Arguments` FROM `Shortcut`", 3))
+    for folder in ("ProgramMenuFolder", "DesktopFolder", "StartupFolder"):
+        match = [(c, a) for s, c, a in shortcuts if s == "Link" + folder]
+        assert len(match) == 1, folder
+        component, args = match[0]
+        assert components[component][0] == folder
+        assert args == ("" if folder == "StartupFolder" else "--show")
+        assert components[component][1] == ('TLTRAYSTARTUP = "1"' if folder == "StartupFolder" else "")
+    services = list(rows("SELECT `Name`,`StartType`,`StartName` FROM `ServiceInstall`", 3))
+    assert len(services) == 2
+    for name, start, account in services:
+        assert start == "3" and account == "NT SERVICE\\" + name, (name, start, account)
+    for name, event in rows("SELECT `Name`,`Event` FROM `ServiceControl`", 2):
+        assert int(event) & (1 | 16) == 0, "MSI must never start a service: " + name
+    print("PASS optional login startup, Start/Desktop shortcuts and Manual services with no automatic start.", flush=True)
     dirs = {d: (parent, name.split("|")[-1]) for d, parent, name in rows("SELECT `Directory`,`Directory_Parent`,`DefaultDir` FROM `Directory`", 3)}
     def rel(d):
         if d == "appRoot": return Path()

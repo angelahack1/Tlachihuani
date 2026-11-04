@@ -5,6 +5,8 @@ This is the onboarding document for Claude, Codex, and every coding agent workin
 
 For v0.2.1 ZIP packaging, migration and verification, read the [packaging notes](docs/releases/v0.2.1.md) and the [Windows setup guide](packaging/setup/README.md). Change the product version in `Directory.Build.props` and refresh internal project lock references together.
 
+`Build-Release.cmd` is the root release entry point. It chooses the highest stable local Git tag numerically, stamps product/internal project versions, rebuilds into fresh staging and verifies before copying the install ZIP to `dist`. It never commits, tags or pushes. See [release building](docs/release-building.md). Setup asks whether XT should appear at sign-in, always installs Start/Desktop shortcuts, and leaves both services stopped/Manual. Startup shortcuts must never start services. Preserve the distinction between the original unelevated wizard and its privileged MSI helper.
+
 ## Project identity and controller
 
 **Project root:** `C:\Development\XAIHT\Tlachihuani`.

@@ -15,9 +15,9 @@ SRC = Path(__file__).resolve().parent
 if sys.argv[1:] not in ([], ["--isolated-acceptance"]):
     raise SystemExit("Expected no arguments or --isolated-acceptance")
 isolated = bool(sys.argv[1:])
-WORK = ROOT / ("artifacts/setup-build-qa" if isolated else "artifacts/setup-build")
-OUT = ROOT / ("artifacts/verification/setup-package-qa" if isolated else "artifacts/setup")
-PUB = ROOT / "artifacts/publish"
+WORK = Path(os.environ.get("TL_SETUP_WORK", ROOT / ("artifacts/setup-build-qa" if isolated else "artifacts/setup-build")))
+OUT = Path(os.environ.get("TL_SETUP_OUTPUT", ROOT / ("artifacts/verification/setup-package-qa" if isolated else "artifacts/setup")))
+PUB = Path(os.environ.get("TL_PUBLISH_DIR", ROOT / "artifacts/publish"))
 NAME = "Tlachihuani.SetupAcceptance" if isolated else "Tlachihuani"
 FAMILY = uuid.UUID("1b626a92-29ac-4c9b-bdad-a82914f47e04")
 if isolated:
@@ -76,6 +76,7 @@ for key,value in {
 child(pkg,"SetProperty",Id="ARPINSTALLLOCATION",Value="[appRoot]",Before="InstallValidate",Sequence="execute")
 child(pkg,"SetProperty",Id="ARPREADME",Value="[appRoot]Setup\\START-HERE.html",Before="InstallValidate",Sequence="execute")
 child(pkg,"Property",Id="TLOPERATOR",Secure="yes")
+child(pkg,"Property",Id="TLTRAYSTARTUP",Value="0",Secure="yes")
 child(pkg,"SetProperty",Id="TLOPERATOR",Value="[UserSID]",Before="CostFinalize",Sequence="execute",Condition="NOT TLOPERATOR")
 files=child(child(child(pkg,"StandardDirectory",Id="ProgramFiles64Folder"),"Directory",Id="vendor",Name="XAIHT"),"Directory",Id="appRoot",Name=NAME)
 feature=child(pkg,"Feature",Id="Complete",Title=NAME,Level="1")
@@ -118,16 +119,21 @@ for rel,p in payload+[("Setup/SetupIdentity.exe",guard),("Uninstaller.exe",remov
         child(comp,"ServiceControl",Name=name,Stop="uninstall",Remove="uninstall",Wait="yes")
 tray="[#" + ident("F","Tray/Tlachihuani.Tray.exe")+"]"
 standard_dirs={}
-for sd,label in [("ProgramMenuFolder",NAME+" XT"),("StartupFolder",NAME+" XT")]:
+for sd,label in [("ProgramMenuFolder",NAME+" XT"),("DesktopFolder",NAME+" XT"),("StartupFolder",NAME+" XT")]:
     standard_dirs[sd]=child(pkg,"StandardDirectory",Id=sd)
     c=component(standard_dirs[sd],sd)
-    child(c,"Shortcut",Id="Link"+sd,Name=label,Target=tray,WorkingDirectory=ident("D","Tray"),Icon="XT.ico",**({"Arguments":"--show"} if sd=="ProgramMenuFolder" else {}))
+    if sd=="StartupFolder":
+        # MSI installs the common login shortcut only for an explicit choice.
+        # Neither shortcut nor ServiceControl starts an SCM service at login.
+        c.set("Condition", 'TLTRAYSTARTUP = "1"')
+    child(c,"Shortcut",Id="Link"+sd,Name=label,Target=tray,WorkingDirectory=ident("D","Tray"),Icon="XT.ico",**({"Arguments":"--show"} if sd!="StartupFolder" else {}))
     child(c,"RegistryValue",Root="HKLM",Key="Software\\XAIHT\\"+NAME+"\\Setup",Name=sd,Type="integer",Value="1",KeyPath="yes")
 # App-owned discovery values are transactional, machine-wide and removed with
 # the package. Protected ProgramData identity/history are deliberately separate.
 c=component(files,"ProductRegistration")
 for name,value in {"InstallLocation":"[appRoot]","Version":VERSION,"OperatorSID":"[TLOPERATOR]"}.items():
     child(c,"RegistryValue",Root="HKLM",Key="Software\\XAIHT\\"+NAME,Name=name,Type="string",Value=value,**({"KeyPath":"yes"} if name=="InstallLocation" else {}))
+child(c,"RegistryValue",Root="HKLM",Key="Software\\XAIHT\\"+NAME,Name="TrayAtLogin",Type="integer",Value="[TLTRAYSTARTUP]")
 menu=standard_dirs["ProgramMenuFolder"]
 c=component(menu,"MaintenanceShortcuts")
 child(c,"Shortcut",Id="UninstallLink",Name="Uninstall "+NAME,Target="[System64Folder]msiexec.exe",Arguments="/x "+CODE,Icon="XT.ico")
@@ -156,8 +162,9 @@ if not isolated:
     quick.write_text(f"TLACHIHUANI {VERSION} - WINDOWS x64\n\n"
         "1. Right-click the downloaded ZIP and choose Extract All.\n"
         "2. Open START-HERE.html for the illustrated installation guide.\n"
-        "3. Double-click Installer.exe; review, install, approve Windows UAC.\n"
-        "4. Open Tlachihuani XT from Start. Choose Start Services in XT.\n\n"
+        "3. Double-click Installer.exe. Choose whether XT should appear at sign-in.\n"
+        "4. Review, install, approve Windows UAC. XT opens gray; services stay stopped.\n"
+        "5. Start/Desktop shortcuts reopen XT. Choose Start Services only when needed.\n\n"
         "No Python, .NET SDK, or separate .NET 10 runtime installation is required.\n"
         "Remove using Control Panel > Programs and Features > Tlachihuani > Uninstall.\n"
         "Downloads and job history are preserved. For migration, read the guide.\n"
