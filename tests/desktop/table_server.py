@@ -153,6 +153,11 @@ def serve(repo, state, port):
                 ),
             )
     journal.db.commit()
+    # Deliberately failed source-only QA job for visible recovery controls.
+    failed_id = hashlib.sha256((profiles['table-review'] + '4').encode()).hexdigest()[:32]
+    journal.db.execute("UPDATE jobs SET desired='running' WHERE id=?", (failed_id,))
+    engine.failures[failed_id] = 'QA disk verification failure; recheck required'
+    journal.db.commit()
     from django.contrib.auth import authenticate
 
     assert (
@@ -176,11 +181,12 @@ def serve(repo, state, port):
                     body=body,
                     authorization="Bearer " + (bearer or ""),
                     key=key,
-                    revision=revision,
+                    # Match client.request's HTTP If-Match encoding at this seam.
+                    revision=f'"{revision}"' if revision is not None else None,
                 )
             )
             journal.db.commit()
-            return result
+            return result[0], torrenter_views.client.publication_status(result[1])
         except Problem as exc:
             journal.db.rollback()
             raise torrenter_views.client.JobsHttpError(exc.status, str(exc)) from exc

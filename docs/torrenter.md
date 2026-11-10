@@ -51,7 +51,7 @@ Get-Service Tlachihuani,Tlachihuani.Jobs
 Invoke-RestMethod 'http://127.0.0.1:12064/api/v1/health'
 ```
 
-To enable XT on future logins, run `.\packaging\windows\Set-TrayStartup.ps1` as the intended Windows user. Jobs has its own delayed automatic startup and SCM recovery policy.
+To enable XT on future logins, run `.\packaging\windows\Set-TrayStartup.ps1` as the intended Windows user. Both services remain Manual; opening XT at sign-in does not start them. The operator chooses **Start Services**.
 
 ## REST contract for the browser and wrapped agent
 
@@ -77,6 +77,44 @@ Use a unique `Idempotency-Key` for each durable mutation. Send `If-Match: "N"` f
 Trusted application enrollment uses native `{"op":"issue","gateway":true,"profile":"<application account>","scope":"read submit control"}`. Protect the returned signing key in the client’s credential store. Exchange an assertion at `POST /sessions/delegated` with `gateway_id`, `account`, `nonce`, `expires` (Unix seconds) and `signature`. Sign the UTF-8 bytes of Python-compatible compact JSON for `[gateway_id,account,"Tlachihuani.Torrenter",nonce,expires]` with HMAC-SHA256 using the UTF-8 signing key and lowercase hex output. The server checks the enrolled account, the single-use nonce and a maximum 90-second assertion window. The resulting token inherits the enrollment scopes. **Revoke access** in XT invalidates the operator’s sessions and enrollments. The Tlamatini wrapper belongs in a separately authorized Tlamatini change.
 
 ## Ownership and recovery
+
+### Stalled queues and verification (source correction, 10 November 2026)
+
+The two-per-account/four-per-host limits are unchanged. After 180 seconds without
+payload progress, an unfinished running transfer yields only when other eligible
+queued work is blocked. It retains partial data and running intent, waits at least
+60 seconds and retries behind waiting work. The snapshot reports `phase: queued`,
+`queue_reason: stalled_retry` and `retry_in_seconds`; the journal records
+`stalled_retry`. No timer changes user-paused or user-stopped jobs. No-progress
+rotation excludes checking, verifying and completed/seeding transfers, and does not
+disconnect a stalled transfer when the waiting job can already use a free slot.
+
+Publication waits for [`torrent_paused_alert`](https://libtorrent.org/reference-Alerts.html#torrent_paused_alert)
+before hashing: `pause()` itself is asynchronous. A missing disk acknowledgment becomes an explicit recoverable error
+after 60 seconds. Recheck clears the failure and validates the retained pieces;
+successful publication clears obsolete errors. Completed jobs retain their
+completion even when the peer session's desired state is stopped. Actual errors
+and delivery failures remain visible. Rapid Stop/Start finishes releasing the old
+handle before reopening it rather than leaving a paused handle occupying a slot.
+Label/revision edits during hashing retain the disk-pause acknowledgment.
+
+The two Tlamatini clients normalize historical completed/stopped snapshots, label
+obsolete errors as `previous_error`, expose recovery guidance and restrict workspace
+actions to eligible selections. Scheduler and disk synchronization changes belong
+to Jobs and require a separate service update. No build or installation was run for
+this source correction; the live queue was inspected without changing its jobs.
+
+Run `tests/integration/test_transfer_recovery.py` visibly for the real local-peer
+starvation/restart regression, then the existing magnet and delivery suites.
+`tests/desktop/torrenter_table.py` drives both editions' real source workspace and
+authenticated Jobs API against isolated QA records, with headed Chrome. Its UI
+records are not evidence of downloading; the peer suite supplies that evidence.
+The 10 November run passed 64 automated checks and 48 headed-browser checks across
+both editions. Four real local-peer payloads completed despite two silent swarms.
+An independent read-only installed audit matched all 432 delivered files from 21
+completed downloads. Evidence is under
+`artifacts/verification/torrenter-state-20261110/`; the installed service and its
+three unfinished downloads were left unchanged.
 
 ### Windows Downloads publication (1 November 2026)
 

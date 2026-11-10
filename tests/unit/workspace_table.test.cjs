@@ -7,6 +7,24 @@ const job = (job_id, overrides={}) => ({job_id,name:job_id,selected_bytes:100,ve
   queue_position:0,completed_at:null,tags:[],tracker_hosts:[],...overrides});
 const order = (rows,key,direction=1) => table.sorted(rows,[{key,direction}]).map(x=>x.job_id);
 
+test('completed stopped transfers are not restartable downloads',()=>{
+  const done=job('done',{phase:'stopped',desired_state:'stopped',completed_at:123,delivery_state:'saved'});
+  assert.equal(table.status(done),'completed');assert.equal(table.canAction(done,'start'),false);
+  assert.equal(table.canAction(done,'recheck'),true);assert.equal(table.canAction(done,'reseed'),true);
+  assert.equal(table.canAction(done,'cancel'),false);
+});
+test('recovery actions follow desired state and never confuse failures with stopped',()=>{
+  for(const [phase,desired,action] of [['stopped','stopped','start'],['paused','paused','resume'],['failed','running','recheck']]) {
+    const row=job(phase,{phase,desired_state:desired});assert.equal(table.canAction(row,action),true);
+    if(phase==='failed')assert.equal(table.canAction(row,'start'),false);
+  }
+  assert.equal(table.canAction(job('cancelled',{desired_state:'cancelled'}),'recheck'),false);
+  assert.equal(table.canAction(job('checking',{phase:'checking'}),'recheck'),false);
+});
+test('stalled automatic retry is visible without claiming a failed download',()=>{
+  assert.equal(table.status(job('retry',{phase:'queued',queue_reason:'stalled_retry'})),'queued · retry scheduled');
+});
+
 test('exactly twelve data columns; Select is never sortable',()=>{
   assert.equal(table.columns.length,12);assert.equal(new Set(table.columns.map(x=>x.key)).size,12);
   assert.ok(!table.columns.some(x=>/select$/i.test(x.key)));

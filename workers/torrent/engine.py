@@ -136,6 +136,12 @@ def endpoint(url):
 
 
 class Engine:
+    # A silent swarm must not indefinitely occupy another download's slot.
+    # These timers are runtime scheduling state, never a change to user intent.
+    STALL_SECONDS = 180
+    RETRY_SECONDS = 60
+    DISK_SETTLE_SECONDS = 60
+
     def __init__(self, journal, development):
         self.j = journal
         self.development = development
@@ -147,6 +153,11 @@ class Engine:
         self.last_cleanup = 0
         self.pending_release = {}
         self.failures = {}
+        self.progress = {}
+        self.retry_after = {}
+        self.queue_turn = {}
+        self.verification_wait = {}
+        self.disk_quiet = set()
         self.publisher = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="verify-selected"
         )
@@ -355,11 +366,89 @@ class Engine:
         h.set_download_limit(opts.get("download_limit", 0))
         h.set_upload_limit(opts.get("upload_limit", 0))
         self.handles[row["id"]] = h
+        self.retry_after.pop(row["id"], None)
+        self.progress[row["id"]] = (0, time.monotonic())
         return h
+
+    def rotate_stalled(self, rows):
+        """Yield only to runnable work; keep partial data and stopped jobs untouched."""
+        now = time.monotonic()
+        counts = {}
+        for row in rows:
+            if row["id"] in self.handles:
+                counts[row["owner"]] = counts.get(row["owner"], 0) + 1
+        waiting = [row for row in rows if row["desired"] == "running"
+                   and not row["completed"] and row["id"] not in self.handles
+                   and row["id"] not in self.failures
+                   and self.retry_after.get(row["id"], 0) <= now]
+        for row in rows:
+            ident = row["id"]
+            h = self.handles.get(ident)
+            if not h or ident in self.pending_release or row["desired"] != "running":
+                continue
+            status = h.status()
+            if row["completed"] or status.is_finished or "checking" in str(status.state) or status.errc.value():
+                self.progress[ident] = (status.total_payload_download, now)
+                continue
+            previous, since = self.progress.get(ident, (status.total_payload_download, now))
+            if status.total_payload_download != previous or status.download_payload_rate > 0:
+                since = now
+            self.progress[ident] = (status.total_payload_download, since)
+            # Reserve each released slot for distinct queued work. A queued job
+            # belonging to another saturated account cannot use this slot.
+            candidate = next((r for r in waiting if
+                              (r["owner"] == row["owner"] and counts[r["owner"]] >= 2)
+                              or (len(self.handles) >= 4 and
+                                  (r["owner"] == row["owner"] or counts.get(r["owner"], 0) < 2))), None)
+            if now - since < self.STALL_SECONDS or candidate is None:
+                continue
+            waiting.remove(candidate)
+            counts[row["owner"]] -= 1
+            counts[candidate["owner"]] = counts.get(candidate["owner"], 0) + 1
+            self.retry_after[ident] = now + self.RETRY_SECONDS
+            self.queue_turn[ident] = now
+            h.pause()
+            h.save_resume_data()
+            self.pending_release[ident] = time.time()
+            self.j.event(row["owner"], ident, "stalled_retry")
+
+    def forget_handle(self, ident):
+        self.progress.pop(ident, None)
+        self.verification_wait.pop(ident, None)
+        self.disk_quiet.discard(ident)
+
+    def verify_ready(self, row, handle):
+        """pause() is asynchronous: hash only after its disk-complete alert."""
+        ident = row["id"]
+        if ident in self.publications:
+            return
+        now = time.monotonic()
+        waiting = self.verification_wait.get(ident)
+        if waiting is None:
+            self.verification_wait[ident] = (row["revision"], now)
+            self.disk_quiet.discard(ident)
+            handle.pause()
+            return
+        # A label/revision edit does not resume the disk writer. Keep its pause
+        # acknowledgement; pause() on an already paused handle emits no new one.
+        if waiting[0] != row["revision"]:
+            self.verification_wait[ident] = (row["revision"], waiting[1])
+        if ident in self.disk_quiet:
+            self.publications[ident] = (
+                row["revision"], self.publisher.submit(
+                    self.verify_files, self.j.files_root(row), row["metainfo"],
+                    json.loads(row["selection"])),
+            )
+        elif now - waiting[1] > self.DISK_SETTLE_SECONDS:
+            self.failures[ident] = "Disk did not finish pausing for verification. Recheck this download."
 
     def alerts(self):
         for session in self.sessions.values():
             for alert in session.pop_alerts():
+                if isinstance(alert, lt.torrent_paused_alert):
+                    for ident, handle in self.handles.items():
+                        if handle == alert.handle and ident in self.verification_wait:
+                            self.disk_quiet.add(ident)
                 if isinstance(
                     alert, (lt.save_resume_data_alert, lt.save_resume_data_failed_alert)
                 ):
@@ -376,9 +465,13 @@ class Engine:
                             # Missing resume data is recoverable by rechecking existing bytes.
                             session.remove_torrent(self.handles.pop(ident))
                             self.pending_release.pop(ident, None)
+                            self.forget_handle(ident)
 
     def snapshot(self, row):
         result = json.loads(row["snapshot"])
+        # Stored snapshots are historical evidence, not current error state.
+        for key in ("error", "queue_reason", "retry_in_seconds"):
+            result.pop(key, None)
         desired = row["desired"]
         h = self.handles.get(row["id"])
         if h and h.is_valid():
@@ -388,6 +481,7 @@ class Engine:
                 phase = "checking"
             elif s.errc.value():
                 phase = "failed"
+                result["error"] = s.errc.message()
             elif s.is_finished:
                 phase = (
                     "seeding"
@@ -395,7 +489,7 @@ class Engine:
                     and json.loads(row["options"]).get("seed_after_completion")
                     else ("completed" if row["completed"] else "verifying")
                 )
-            if row["id"] in self.failures:
+            if row["id"] in self.failures and not row["completed"]:
                 phase = "failed"
             if desired != "running":
                 phase = {
@@ -425,7 +519,7 @@ class Engine:
             )
         else:
             result.update(
-                phase={
+                phase="completed" if row["completed"] else {
                     "paused": "paused",
                     "stopped": "stopped",
                     "cancelled": "cancelled",
@@ -451,8 +545,12 @@ class Engine:
             result.pop(private_setting, None)
         result["destination_root_id"] = row["root_id"]
         result.update(self.delivery.status(row))
-        if row["id"] in self.failures:
+        if row["id"] in self.failures and not row["completed"]:
             result["error"] = self.failures[row["id"]]
+        if row["id"] in self.retry_after and desired == "running" and not row["completed"]:
+            result.update(phase="queued", queue_reason="stalled_retry",
+                          retry_in_seconds=max(0, int(self.retry_after[row["id"]] - time.monotonic())),
+                          download_rate_bps=0, upload_rate_bps=0, peers=0, seeds=0)
         return result
 
     def tick(self):
@@ -500,6 +598,13 @@ class Engine:
         rows = self.j.db.execute(
             "SELECT * FROM jobs WHERE removed=0 ORDER BY coalesce(json_extract(options,'$.queue_position'),0),created,id"
         ).fetchall()
+        live_ids = {row["id"] for row in rows}
+        for mapping in (self.progress, self.retry_after, self.queue_turn):
+            for ident in set(mapping) - live_ids:
+                del mapping[ident]
+        self.rotate_stalled(rows)
+        # Stable sort retains the user's queue order among jobs on the same turn.
+        rows.sort(key=lambda row: self.queue_turn.get(row["id"], 0))
         self.delivery.tick(rows)
         for row in rows:
             ident = row["id"]
@@ -516,6 +621,7 @@ class Engine:
                 and (not row["completed"] or can_seed)
                 and not h
                 and ident not in self.failures
+                and self.retry_after.get(ident, 0) <= time.monotonic()
                 and len(self.handles) < 4
             ):
                 same_owner = sum(
@@ -537,18 +643,7 @@ class Engine:
                 if before.get("phase") != state["phase"]:
                     self.j.event(row["owner"], ident, state["phase"])
             if state["phase"] == "verifying":
-                if not json.loads(row["options"]).get("seed_after_completion"):
-                    h.pause()
-                if ident not in self.publications:
-                    self.publications[ident] = (
-                        row["revision"],
-                        self.publisher.submit(
-                            self.verify_files,
-                            self.j.files_root(row),
-                            row["metainfo"],
-                            json.loads(row["selection"]),
-                        ),
-                    )
+                self.verify_ready(row, h)
             if ident in self.publications and self.publications[ident][1].done():
                 revision, future = self.publications.pop(ident)
                 if revision == row["revision"] and row["desired"] == "running":
@@ -557,10 +652,15 @@ class Engine:
                     except (OSError, Problem, RuntimeError) as exc:
                         self.failures[ident] = str(exc)
                     else:
+                        self.failures.pop(ident, None)
                         self.j.db.execute(
                             "INSERT OR REPLACE INTO published VALUES(?,?)",
                             (ident, packed(entries)),
                         )
+                        self.verification_wait.pop(ident, None)
+                        self.disk_quiet.discard(ident)
+                        if opts.get("seed_after_completion"):
+                            h.resume()
                         self.j.db.execute(
                             "UPDATE jobs SET completed=? WHERE id=?", (int(now), ident)
                         )
@@ -575,6 +675,7 @@ class Engine:
                 )
             if (
                 row["desired"] != "running"
+                or ident in self.pending_release
                 or state["phase"] in ("completed", "failed")
                 or ratio_reached
             ):
@@ -585,6 +686,7 @@ class Engine:
                 elif now - self.pending_release[ident] > 12:
                     self.sessions[row["owner"]].remove_torrent(self.handles.pop(ident))
                     del self.pending_release[ident]
+                    self.forget_handle(ident)
             elif now - self.last_checkpoint >= 30:
                 h.save_resume_data()
         if now - self.last_checkpoint >= 30:

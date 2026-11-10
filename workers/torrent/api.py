@@ -184,6 +184,8 @@ class Api:
             "root_ids": ["downloads", "archive"],
             "active_per_owner": 2,
             "active_per_host": 4,
+            "stall_yield_seconds": self.e.STALL_SECONDS,
+            "stalled_retry_seconds": self.e.RETRY_SECONDS,
             "revision": row["revision"] if row else 1,
             "defaults": defaults,
         }
@@ -853,6 +855,10 @@ class Api:
                 )
                 if ident in self.e.handles:
                     self.e.handles[ident].force_recheck()
+                    if ident not in self.e.pending_release:
+                        self.e.handles[ident].resume()
+                self.e.verification_wait.pop(ident, None)
+                self.e.disk_quiet.discard(ident)
                 state = "running"
             else:
                 require(action in transitions, 422, "Unknown transfer action.")
@@ -865,6 +871,10 @@ class Api:
                 )
                 state = after
             self.e.failures.pop(ident, None)
+            if state == "running":
+                self.e.retry_after.pop(ident, None)
+                self.e.queue_turn.pop(ident, None)
+                self.e.progress.pop(ident, None)
         elif method == "PATCH" and len(parts) == 2:
             options = json.loads(row["options"])
             require(

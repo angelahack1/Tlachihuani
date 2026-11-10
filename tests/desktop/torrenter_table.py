@@ -180,6 +180,9 @@ def run(output, english, spanish):
         )
 
     def login(page, base, username="table-review"):
+        # Deliberately truncate one read-only session response to pin bounded
+        # recovery. Mutation requests are never intercepted or retried here.
+        page.route('**/workspace/session/', lambda route: route.fulfill(status=200, content_type='application/json', body=''), times=1)
         page.goto(base + "/login/?next=/agent/torrenter/workspace/")
         foreground_page(page)
         page.locator("#id_username").fill(username)
@@ -219,6 +222,13 @@ def run(output, english, spanish):
                     identities[proc.pid] = proc.info["create_time"]
             page = context.pages[0]
             page.on("pageerror", lambda exc: errors.append(str(exc)))
+            page.on('requestfailed', lambda req: print('BROWSER REQUEST FAILED:', req.method, req.url, req.failure, flush=True))
+            def finished(request):
+                if request.url.endswith('/session/') or '/actions' in request.url:
+                    response = request.response()
+                    print('BROWSER TRANSPORT:', request.method, request.url, response.status,
+                          'body bytes', len(response.body()), flush=True)
+            page.on('requestfinished', finished)
             try:
                 for repo, port in ((english, 19431), (spanish, 19432)):
                     edition = repo.name
@@ -259,6 +269,40 @@ def run(output, english, spanish):
                             raise RuntimeError("Server startup timeout")
                         page.set_viewport_size({"width": 1600, "height": 1000})
                         login(page, base)
+                        # Exercise real source UI -> authenticated Django -> Jobs
+                        # mutations on isolated QA rows, never installed downloads.
+                        page.get_by_role('button', name='QA Atlas 1 — résumé.pdf', exact=True).click()
+                        expect(page.locator('[data-action="start"]')).to_be_disabled()
+                        expect(page.locator('[data-action="cancel"]')).to_be_disabled()
+                        expect(page.locator('[data-action="recheck"]')).to_be_enabled()
+                        page.locator('[data-tab="files"]').click()
+                        expect(page.get_by_role('button', name='Save file selection', exact=True)).to_be_enabled()
+                        page.locator('[data-tab="trackers"]').click()
+                        expect(page.get_by_role('button', name='Replace source list…', exact=True)).to_be_visible()
+                        page.locator('[data-tab="general"]').click()
+                        passed(page, edition + ' · session recovers one empty response; completed downloads cannot be started or cancelled again', True)
+                        page.get_by_role('button', name='QA Atlas 3 — résumé.pdf', exact=True).click()
+                        recovery_row = page.locator('#rows tr').filter(has=page.get_by_role('button', name='QA Atlas 3 — résumé.pdf', exact=True))
+                        expect(page.locator('[data-action="start"]')).to_be_enabled()
+                        page.locator('[data-action="start"]').click()
+                        expect(page.locator('#message')).to_contain_text('Request recorded')
+                        expect(recovery_row).to_contain_text('queued')
+                        expect(page.locator('[data-action="start"]')).to_be_disabled()
+                        page.locator('[data-action="stop"]').click()
+                        expect(recovery_row).to_contain_text('stopped')
+                        passed(page, edition + ' · stopped partial download Start / Stop reaches the real Jobs API', True)
+                        page.get_by_role('button', name='QA Atlas 5 — résumé.pdf', exact=True).click()
+                        recovery_row = page.locator('#rows tr').filter(has=page.get_by_role('button', name='QA Atlas 5 — résumé.pdf', exact=True))
+                        expect(recovery_row).to_contain_text('failed')
+                        expect(page.locator('[data-action="start"]')).to_be_disabled()
+                        expect(page.locator('[data-action="recheck"]')).to_be_enabled()
+                        page.locator('[data-action="recheck"]').click()
+                        expect(recovery_row).to_contain_text('queued')
+                        expect(page.locator('#details')).not_to_contain_text('QA disk verification failure')
+                        page.locator('[data-action="stop"]').click()
+                        expect(recovery_row).to_contain_text('stopped')
+                        passed(page, edition + ' · failed download Recheck clears the actual engine error', True)
+                        page.locator('#clear-filters').click()
                         identity = page.request.get(
                             base + "/agent/torrenter/workspace/session/"
                         ).json()
@@ -506,6 +550,10 @@ def run(output, english, spanish):
                             True,
                         )
                         assert not errors, errors
+                    except BaseException:
+                        print('VISIBLE FAILURE STATUS:', page.locator('#message').inner_text(), flush=True)
+                        page.screenshot(path=str(output / (edition + '-failure.png')))
+                        raise
                     finally:
                         proc.terminate()
                         proc.wait(timeout=15)
