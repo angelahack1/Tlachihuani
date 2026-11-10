@@ -184,10 +184,10 @@ def check(exe, installed, work, controller, username, verify_completed=None):
                 expect(
                     page.get_by_role("button", name="＋ Add torrent")
                 ).to_be_visible()
-                page.get_by_role("button", name="Preferences").click()
+                page.get_by_role("button", name="Columns & view").click()
                 page.locator("#column").select_option("2")
                 page.get_by_role("button", name="Move right").click()
-                page.locator("#preferences").get_by_role("button", name="Close").click()
+                page.locator("#table-options").get_by_role("button", name="Done").click()
                 verify_workspace_geometry(page)
                 print(
                     "PASS headed Chrome: signed-in workspace, refresh and layout preferences",
