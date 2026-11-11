@@ -1,6 +1,7 @@
 # Remove only this SCM registration. Installed content and the job journal are retained.
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot\..\..\scripts\Assert-Visible.ps1"
+. "$PSScriptRoot\JobsPayload.ps1"
 Assert-VisibleDevelopmentConsole
 $name='Tlachihuani.Jobs'
 $expected='"'+(Join-Path $env:ProgramFiles 'XAIHT\Tlachihuani\Jobs\Tlachihuani.Jobs.exe')+'"'
@@ -15,4 +16,5 @@ Stop-Service -Name $name
 if((Assert-Registration).State -ne 'Stopped'){throw 'Jobs is still active.'}
 & sc.exe delete $name
 if($LASTEXITCODE){throw "SCM deletion failed: $LASTEXITCODE"}
-Write-Host 'Jobs registration removed. State, credentials and downloaded files were retained.'
+Remove-JobsPeerFirewallRule
+Write-Host 'Jobs registration and its peer firewall rules removed. State, credentials and downloaded files were retained.'

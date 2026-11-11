@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 import libtorrent as lt
 
-from storage import Problem, packed, require, safe_file
+from storage import Problem, io_path, packed, require, safe_file
 from delivery import Delivery
 
 
@@ -171,7 +171,7 @@ class Engine:
         for file in files:
             if file["id"] not in selected:
                 continue
-            path = safe_file(root, file["path"])
+            path = io_path(safe_file(root, file["path"]))
             before = path.stat()
             require(before.st_size == file["size"], 409, "Selected file is incomplete.")
             sha = hashlib.sha256()
@@ -190,28 +190,35 @@ class Engine:
             entries.append(dict(file, sha256=sha.hexdigest()))
         return entries
 
+    @staticmethod
+    def session_settings(development):
+        # An installed engine must be reachable by peers: without router port
+        # mapping (UPnP / NAT-PMP) and incoming uTP, a swarm whose seeds are
+        # behind NAT never connects and the download stalls at 0 B/s.
+        # Development fixtures stay loopback-only and never touch the router.
+        public = not development
+        return {
+            "listen_interfaces": "0.0.0.0:0" if public else "127.0.0.1:0",
+            "enable_dht": public,
+            "enable_lsd": False,
+            "enable_upnp": public,
+            "enable_natpmp": public,
+            "allow_multiple_connections_per_ip": development,
+            "ssrf_mitigation": True,
+            "enable_incoming_utp": public,
+            "apply_ip_filter_to_trackers": True,
+            "upload_rate_limit": 262144,
+            "alert_mask": int(
+                lt.alert.category_t.storage_notification
+                | lt.alert.category_t.error_notification
+                | lt.alert.category_t.status_notification
+            ),
+        }
+
     def session(self, owner):
         if owner in self.sessions:
             return self.sessions[owner]
-        session = lt.session(
-            {
-                "listen_interfaces": "127.0.0.1:0" if self.development else "0.0.0.0:0",
-                "enable_dht": not self.development,
-                "enable_lsd": False,
-                "enable_upnp": False,
-                "enable_natpmp": False,
-                "allow_multiple_connections_per_ip": self.development,
-                "ssrf_mitigation": True,
-                "enable_incoming_utp": False,
-                "apply_ip_filter_to_trackers": True,
-                "upload_rate_limit": 262144,
-                "alert_mask": int(
-                    lt.alert.category_t.storage_notification
-                    | lt.alert.category_t.error_notification
-                    | lt.alert.category_t.status_notification
-                ),
-            }
-        )
+        session = lt.session(self.session_settings(self.development))
         blocked = [
             "0.0.0.0/8",
             "10.0.0.0/8",

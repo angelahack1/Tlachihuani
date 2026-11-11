@@ -159,6 +159,24 @@ class MagnetQueueTests(unittest.TestCase):
                 journal.db.close()
 
 
+class SessionSettingsTests(unittest.TestCase):
+    """Checks the settings without opening a public session (no UPnP traffic in tests)."""
+
+    def test_installed_engine_accepts_incoming_peers(self):
+        settings = Engine.session_settings(False)
+        self.assertEqual(settings["listen_interfaces"], "0.0.0.0:0")
+        for key in ("enable_dht", "enable_upnp", "enable_natpmp", "enable_incoming_utp"):
+            self.assertIs(settings[key], True, key)
+        self.assertIs(settings["ssrf_mitigation"], True)
+        self.assertLessEqual(set(settings), set(lt.default_settings()))
+
+    def test_development_engine_stays_loopback_only(self):
+        settings = Engine.session_settings(True)
+        self.assertEqual(settings["listen_interfaces"], "127.0.0.1:0")
+        for key in ("enable_dht", "enable_upnp", "enable_natpmp", "enable_incoming_utp"):
+            self.assertIs(settings[key], False, key)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

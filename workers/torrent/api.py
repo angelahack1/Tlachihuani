@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from engine import endpoint, inspect
 from delivery import plain_path
 import libtorrent as lt
-from storage import Problem, digest, new_id, packed, require, safe_file
+from storage import Problem, digest, io_path, new_id, packed, require, safe_file
 
 SCOPES = "read submit control remove erase"
 
@@ -1017,8 +1017,8 @@ class Api:
         for location, root in roots:
             for file in files:
                 path = safe_file(root, file["path"])
-                if path.is_file():
-                    st = path.stat()
+                if io_path(path).is_file():
+                    st = io_path(path).stat()
                     require(st.st_nlink == 1, 409, "Shared file cannot be erased.")
                     result.append(
                         {
@@ -1195,9 +1195,9 @@ class Api:
                         root = plain_path(delivered)
                     path = safe_file(root, entry["path"])
                     require(entry.get("absolute_path", str(path)) == str(path), 409, "The reviewed path changed.")
-                    if not path.exists():
+                    if not io_path(path).exists():
                         continue
-                    st = path.stat()
+                    st = io_path(path).stat()
                     require(
                         st.st_nlink == 1
                         and [st.st_size, str(st.st_mtime_ns), str(st.st_ino)]
@@ -1205,7 +1205,7 @@ class Api:
                         409,
                         "File changed since preview.",
                     )
-                    path.unlink()
+                    io_path(path).unlink()
                 result["phase"] = "succeeded"
                 self.j.db.execute("DELETE FROM published WHERE job=?", (row["id"],))
                 self.j.db.execute("DELETE FROM deliveries WHERE job=?", (row["id"],))

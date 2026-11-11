@@ -13,7 +13,7 @@ import time
 import uuid
 from pathlib import Path
 
-from storage import Problem, packed, require, safe_file
+from storage import Problem, io_path, packed, require, safe_file
 
 
 def plain_path(path):
@@ -48,7 +48,7 @@ def plain_path(path):
 
 
 def fingerprint(path):
-    info = path.stat()
+    info = io_path(path).stat()
     return [info.st_size, info.st_mtime_ns, info.st_ino]
 
 
@@ -60,16 +60,17 @@ def copy_verified(source, destination, entries, closing):
     for entry in entries:
         if closing.is_set():
             raise InterruptedError("Delivery interrupted; it will resume after restart.")
-        origin = safe_file(source, entry["path"])
+        origin = io_path(safe_file(source, entry["path"]))
         target = safe_file(root, entry["path"])
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            with target.open("rb") as stream:
+        output = io_path(target)  # long-path form for I/O; messages keep the plain name
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            with output.open("rb") as stream:
                 actual = hashlib.file_digest(stream, "sha256").hexdigest()
-            require(actual == entry["sha256"] and target.stat().st_size == entry["size"],
+            require(actual == entry["sha256"] and output.stat().st_size == entry["size"],
                     409, "An existing Downloads file differs; it has been preserved: " + str(target))
         else:
-            temporary = target.with_name(".torrenter-" + uuid.uuid4().hex + ".part")
+            temporary = output.with_name(".torrenter-" + uuid.uuid4().hex + ".part")
             try:
                 sha = hashlib.sha256()
                 length = 0
@@ -86,9 +87,9 @@ def copy_verified(source, destination, entries, closing):
                         409, "The service file changed before delivery: " + entry["path"])
                 # A no-replace publication. A concurrent user-created file wins.
                 if os.name == "nt":
-                    os.rename(temporary, target)  # Windows refuses an existing target.
+                    os.rename(temporary, output)  # Windows refuses an existing target.
                 else:
-                    os.link(temporary, target)
+                    os.link(temporary, output)
             finally:
                 temporary.unlink(missing_ok=True)
         result.append({**entry, "fingerprint": fingerprint(target)})

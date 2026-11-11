@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 import tempfile
 import threading
@@ -11,8 +12,8 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "workers" / "torrent"))
-from delivery import Delivery, copy_verified
-from storage import Journal, Problem, packed
+from delivery import Delivery, copy_verified, fingerprint
+from storage import Journal, Problem, io_path, packed, safe_file
 
 
 class DeliveryTests(unittest.TestCase):
@@ -69,6 +70,33 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(Problem):
             copy_verified(self.source, self.destination, [{**self.entries[0], "path": "../outside"}], self.closing)
         self.assertFalse((self.destination.parent / "outside").exists())
+
+    @unittest.skipUnless(os.name == "nt", "Windows MAX_PATH")
+    def test_file_beyond_max_path_is_verified_and_published(self):
+        # Torrents nest folders; below the long service root a file easily passes 260 characters.
+        top = "a-long-torrent-folder-name-0"
+        nested = "/".join([top] + ["a-long-torrent-folder-name-%d" % i for i in range(1, 8)]) + "/book.txt"
+        for base in (self.source, self.destination):
+            self.addCleanup(shutil.rmtree, io_path(base / top), True)
+        origin = io_path(self.source / nested)
+        origin.parent.mkdir(parents=True)
+        origin.write_bytes(self.content)
+        published = self.destination / nested
+        self.assertGreater(len(str(published)), 260)
+        self.assertEqual(safe_file(self.destination, nested), published)  # plain form is kept
+        entries = [{**self.entries[0], "path": nested}]
+        result = copy_verified(self.source, self.destination, entries, self.closing)
+        self.assertEqual(io_path(published).read_bytes(), self.content)
+        self.assertEqual(result[0]["fingerprint"], fingerprint(published))
+        # A retry reuses the identical long-path file instead of failing on it.
+        self.assertEqual(copy_verified(self.source, self.destination, entries, self.closing), result)
+
+    @unittest.skipUnless(os.name == "nt", "Windows extended-length paths")
+    def test_io_path_prefixes_once_and_keeps_unc_shares(self):
+        plain = Path("C:/Users/someone/Downloads/x.bin")
+        self.assertEqual(str(io_path(plain)), "\\\\?\\C:\\Users\\someone\\Downloads\\x.bin")
+        self.assertEqual(io_path(io_path(plain)), io_path(plain))
+        self.assertEqual(str(io_path("\\\\server\\share\\x.bin")), "\\\\?\\UNC\\server\\share\\x.bin")
 
     @unittest.skipUnless(os.name == "nt", "Windows directory junction")
     def test_redirected_account_parent_is_refused_before_any_copy(self):

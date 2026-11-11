@@ -35,20 +35,41 @@ def digest(value):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+_LONG_PREFIX = "\\\\?\\"
+
+
+def io_path(path):
+    """Return the form of ``path`` that Windows file APIs accept at any length.
+
+    Torrent paths are nested below a long service root, so a file easily passes
+    MAX_PATH (260 characters). Without the extended-length prefix, stat, open and
+    rename fail for it unless long paths are enabled machine-wide. Use this only
+    for file I/O: stored, displayed and compared paths keep their plain form.
+    """
+    text = os.fspath(path)
+    if os.name != "nt" or text.startswith(_LONG_PREFIX):
+        return Path(text)
+    text = os.path.abspath(text)
+    if text.startswith("\\\\"):
+        return Path(_LONG_PREFIX + "UNC\\" + text[2:])
+    return Path(_LONG_PREFIX + text)
+
+
 def safe_file(root, relative):
     parts = relative.replace("\\", "/").split("/")
     path = Path(root)
     for item in [path] + [path.joinpath(*parts[:i]) for i in range(1, len(parts) + 1)]:
+        probe = io_path(item)
         if (
-            item.is_symlink()
-            or os.path.lexists(item)
-            and getattr(item.lstat(), "st_file_attributes", 0)
+            probe.is_symlink()
+            or os.path.lexists(probe)
+            and getattr(probe.lstat(), "st_file_attributes", 0)
             & stat.FILE_ATTRIBUTE_REPARSE_POINT
         ):
             raise Problem(409, "A storage path is a reparse point.")
     result = path.joinpath(*parts)
     require(
-        result.resolve().is_relative_to(path.resolve())
+        io_path(result).resolve().is_relative_to(io_path(path).resolve())
         and all(p not in ("", ".", "..") for p in parts),
         422,
         "Invalid relative path.",

@@ -77,9 +77,11 @@ try {
     if($LASTEXITCODE){throw 'Boot configuration failed.'}
     & sc.exe failure Tlachihuani.Jobs reset= 86400 actions= restart/5000/restart/30000/restart/60000
     if($LASTEXITCODE){throw 'SCM recovery setup failed.'}
+    Set-JobsPeerFirewallRule $jobs
     Start-Service Tlachihuani.Jobs
     Write-Host 'Jobs installed. Open XT -> Show panel -> Services -> Open workspace.'
 } catch {
     if($created){ & sc.exe config Tlachihuani.Jobs start= disabled }
+    try { Remove-JobsPeerFirewallRule } catch { Write-Warning "Firewall rule cleanup failed: $_" }
     throw
 }

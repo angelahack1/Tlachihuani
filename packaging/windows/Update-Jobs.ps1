@@ -86,6 +86,8 @@ try {
     # the registered program directory inside the rollback boundary while Jobs
     # is stopped. Do not print a success receipt for a stale or partial payload.
     Assert-InstalledJobsPayload
+    # Installations made before peers could connect inbound have no rule yet.
+    Set-JobsPeerFirewallRule $jobs
     if ($initial.State -eq 'Running') {
         Start-Service Tlachihuani.Jobs
         $image = Join-Path $jobs 'Tlachihuani.Jobs.exe'
