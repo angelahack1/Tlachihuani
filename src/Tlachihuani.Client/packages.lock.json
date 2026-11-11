@@ -8,13 +8,13 @@
       "tlachihuani.core": {
         "type": "Project",
         "dependencies": {
-          "Tlachihuani.Contracts": "[0.3.1, )"
+          "Tlachihuani.Contracts": "[0.3.2, )"
         }
       },
       "tlachihuani.windows": {
         "type": "Project",
         "dependencies": {
-          "Tlachihuani.Core": "[0.3.1, )"
+          "Tlachihuani.Core": "[0.3.2, )"
         }
       }
     },
